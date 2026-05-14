@@ -13,11 +13,7 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
-        // writingminds/FFmpegAndroid 0.3.2 only ships armv7 + x86 ffmpeg binaries.
-        // Forcing armv7 keeps the APK consistent; arm64-v8a Android 11 devices still
-        // run this via the 32-bit ABI bridge. Pure-64-bit devices (Pixel 7+, some
-        // newer Samsungs) will fail loadBinary — pivot to MJPEG if that happens.
-        ndk { abiFilters += listOf("armeabi-v7a") }
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     buildTypes {
@@ -55,13 +51,6 @@ dependencies {
 
     // Embedded HTTP server
     implementation("org.nanohttpd:nanohttpd:2.3.1")
-
-    // ffmpeg for HLS packaging.
-    // Both arthenica ffmpeg-kit and mobile-ffmpeg were removed from Maven Central
-    // in 2025. We fall back to writingminds (older, ffmpeg 3.0.1, async API) which
-    // is still hosted. -c copy transmux + segment muxer + h264_mp4toannexb bsf are
-    // all supported by ffmpeg 3.x so functionality is unaffected.
-    implementation("com.writingminds:FFmpegAndroid:0.3.2")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")

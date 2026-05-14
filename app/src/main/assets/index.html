@@ -7,40 +7,58 @@
 <style>
   html,body{margin:0;background:#000;color:#ddd;font-family:sans-serif;height:100%}
   #wrap{display:flex;flex-direction:column;height:100%}
-  video{flex:1;background:#000;width:100%;object-fit:contain}
-  #bar{padding:8px 12px;font-size:13px;background:#111;display:flex;justify-content:space-between}
+  #stage{flex:1;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  #stage img{max-width:100%;max-height:100%;object-fit:contain}
+  #bar{padding:8px 12px;font-size:13px;background:#111;display:flex;justify-content:space-between;align-items:center;gap:8px}
   button{background:#444;color:#fff;border:0;padding:6px 12px;border-radius:4px;cursor:pointer}
+  button:hover{background:#555}
+  #status{flex:1;min-height:1em}
 </style>
 </head>
 <body>
 <div id="wrap">
-  <video id="v" controls autoplay muted playsinline></video>
+  <div id="stage"><img id="v" alt="live" /></div>
   <div id="bar">
-    <span id="status">连接中...</span>
-    <button onclick="reload()">重新加载</button>
+    <span id="status">连接中…</span>
+    <button onclick="reload()">重连</button>
+    <button onclick="toggleSnap()" id="snapBtn">切到快照模式</button>
   </div>
 </div>
-<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
 <script>
-const v = document.getElementById('v');
+const img = document.getElementById('v');
 const status = document.getElementById('status');
-const src = '/live.m3u8';
-let hls;
-function attach(){
-  if (Hls.isSupported()){
-    hls = new Hls({ liveSyncDurationCount: 2, lowLatencyMode: true });
-    hls.loadSource(src);
-    hls.attachMedia(v);
-    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{ status.textContent='已连接'; v.play().catch(()=>{}); });
-    hls.on(Hls.Events.ERROR, (e,d)=>{ status.textContent='错误: '+d.details; });
-  } else if (v.canPlayType('application/vnd.apple.mpegurl')){
-    v.src = src; v.play();
-    status.textContent = '已连接(原生 HLS)';
+const snapBtn = document.getElementById('snapBtn');
+let mode = 'mjpeg';     // 'mjpeg' | 'snapshot'
+let snapTimer = null;
+
+function attach() {
+  if (snapTimer) { clearInterval(snapTimer); snapTimer = null; }
+  // Cache-bust to force a fresh connection each time
+  const t = Date.now();
+  if (mode === 'mjpeg') {
+    img.src = '/stream.mjpeg?t=' + t;
+    status.textContent = '直播中 (MJPEG)';
+    snapBtn.textContent = '切到快照模式';
   } else {
-    status.textContent = '浏览器不支持 HLS';
+    function pull() { img.src = '/snapshot.jpg?t=' + Date.now(); }
+    pull();
+    snapTimer = setInterval(pull, 1000);
+    status.textContent = '快照模式 (1 张/秒)';
+    snapBtn.textContent = '切到 MJPEG';
   }
 }
-function reload(){ if(hls){hls.destroy();} attach(); }
+
+img.onerror = () => {
+  status.textContent = '连接失败，3 秒后重试…';
+  setTimeout(attach, 3000);
+};
+img.onload = () => {
+  if (mode === 'mjpeg') status.textContent = '直播中 (MJPEG)';
+};
+
+function reload() { attach(); }
+function toggleSnap() { mode = (mode === 'mjpeg') ? 'snapshot' : 'mjpeg'; attach(); }
+
 attach();
 </script>
 </body>

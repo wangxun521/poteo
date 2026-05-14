@@ -8,9 +8,14 @@ import android.os.Looper
 import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.core.Preview
 import androidx.camera.video.FileOutputOptions
+import android.util.Size
+import java.util.concurrent.Executors
 import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
@@ -36,8 +41,10 @@ class SegmentRecorder(
     private val segmentDurationMs: Long,
     private val saveAudio: Boolean,
     private val bitrateController: BitrateController,
+    private val mjpegAnalyzer: ImageAnalysis.Analyzer?,
     private val onSegmentFinalized: (File) -> Unit
 ) {
+    private val analysisExecutor = Executors.newSingleThreadExecutor()
     private val tag = "SegmentRecorder"
     private val main = Handler(Looper.getMainLooper())
     private var videoCapture: VideoCapture<Recorder>? = null
@@ -57,11 +64,28 @@ class SegmentRecorder(
         val prev = Preview.Builder().build()
         videoCapture = capture
         preview = prev
+
+        val analysis: ImageAnalysis? = mjpegAnalyzer?.let { analyzer ->
+            val resSel = ResolutionSelector.Builder()
+                .setResolutionStrategy(
+                    ResolutionStrategy(
+                        Size(640, 480),
+                        ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
+                    )
+                ).build()
+            ImageAnalysis.Builder()
+                .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setResolutionSelector(resSel)
+                .build()
+                .also { it.setAnalyzer(analysisExecutor, analyzer) }
+        }
+
         cameraProvider.unbindAll()
-        // Bind both UseCases. setSurfaceProvider(null) by default => preview is
-        // running but discarded; toggling provider on/off costs nothing and never
-        // interrupts recording.
-        cameraProvider.bindToLifecycle(lifecycleOwner, selector, capture, prev)
+        if (analysis != null) {
+            cameraProvider.bindToLifecycle(lifecycleOwner, selector, capture, prev, analysis)
+        } else {
+            cameraProvider.bindToLifecycle(lifecycleOwner, selector, capture, prev)
+        }
         startNextSegment()
     }
 
@@ -113,5 +137,6 @@ class SegmentRecorder(
         currentRecording?.stop()
         currentRecording = null
         try { cameraProvider.unbindAll() } catch (_: Throwable) {}
+        analysisExecutor.shutdownNow()
     }
 }

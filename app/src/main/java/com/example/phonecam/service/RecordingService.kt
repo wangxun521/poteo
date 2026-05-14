@@ -23,8 +23,8 @@ import com.example.phonecam.R
 import com.example.phonecam.recorder.BitrateController
 import com.example.phonecam.recorder.SegmentRecorder
 import com.example.phonecam.storage.CircularStorageManager
-import com.example.phonecam.streaming.HlsPackager
 import com.example.phonecam.streaming.LocalHttpServer
+import com.example.phonecam.streaming.MjpegStreamer
 import java.io.File
 
 class RecordingService : LifecycleService() {
@@ -51,11 +51,10 @@ class RecordingService : LifecycleService() {
     private lateinit var storage: CircularStorageManager
     private lateinit var segmentRecorder: SegmentRecorder
     private lateinit var bitrateController: BitrateController
-    private lateinit var hlsPackager: HlsPackager
+    private lateinit var mjpegStreamer: MjpegStreamer
     private lateinit var httpServer: LocalHttpServer
 
     private lateinit var videoDir: File
-    private lateinit var hlsDir: File
 
     @SuppressLint("WakelockTimeout")
     override fun onCreate() {
@@ -66,12 +65,11 @@ class RecordingService : LifecycleService() {
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "phonecam:rec").apply { acquire() }
 
         videoDir = File(getExternalFilesDir(null), "videos").apply { mkdirs() }
-        hlsDir = File(cacheDir, "hls").apply { mkdirs() }
 
         storage = CircularStorageManager(videoDir, STORAGE_LIMIT_BYTES)
         bitrateController = BitrateController()
-        hlsPackager = HlsPackager(this, hlsDir)
-        httpServer = LocalHttpServer(this, HTTP_PORT, hlsDir).also {
+        mjpegStreamer = MjpegStreamer()
+        httpServer = LocalHttpServer(this, HTTP_PORT, mjpegStreamer).also {
             try { it.start() } catch (e: Exception) { Log.e(TAG, "http start fail", e) }
         }
 
@@ -88,9 +86,9 @@ class RecordingService : LifecycleService() {
                 segmentDurationMs = SEGMENT_DURATION_MS,
                 saveAudio = saveAudio,
                 bitrateController = bitrateController,
+                mjpegAnalyzer = mjpegStreamer,
                 onSegmentFinalized = { mp4 ->
                     storage.gc()
-                    hlsPackager.appendSegment(mp4)
                     bitrateController.onSegmentFinalized(mp4)
                 }
             )
@@ -106,7 +104,6 @@ class RecordingService : LifecycleService() {
     override fun onDestroy() {
         try { segmentRecorder.stop() } catch (_: Throwable) {}
         try { httpServer.stop() } catch (_: Throwable) {}
-        try { hlsPackager.shutdown() } catch (_: Throwable) {}
         if (::wakeLock.isInitialized && wakeLock.isHeld) wakeLock.release()
         super.onDestroy()
     }
