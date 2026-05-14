@@ -1,2 +1,2 @@
--keep class com.arthenica.** { *; }
+-keep class com.github.hiteshsondhi88.libffmpeg.** { *; }
 -keep class fi.iki.elonen.** { *; }

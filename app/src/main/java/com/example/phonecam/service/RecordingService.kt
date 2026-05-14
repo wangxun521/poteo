@@ -58,7 +58,7 @@ class RecordingService : LifecycleService() {
 
         storage = CircularStorageManager(videoDir, STORAGE_LIMIT_BYTES)
         bitrateController = BitrateController()
-        hlsPackager = HlsPackager(hlsDir)
+        hlsPackager = HlsPackager(this, hlsDir)
         httpServer = LocalHttpServer(this, HTTP_PORT, hlsDir).also {
             try { it.start() } catch (e: Exception) { Log.e(TAG, "http start fail", e) }
         }

@@ -35,9 +35,13 @@ app/src/main/java/com/example/phonecam/
 1. 用 Hedgehog 及以上打开本目录，按提示让 IDE 生成 `gradle-wrapper.jar`、`local.properties`。
 2. Build → Build APK。
 
-### ffmpeg-kit 依赖说明
+### ffmpeg 依赖说明（重要）
 
-`arthenica/ffmpeg-kit` 项目 2025 年 1 月已归档，但 `6.0-2.LTS` 仍在 Maven Central。如果将来该包被删导致 CI 失败，把 [app/build.gradle.kts](app/build.gradle.kts) 里的依赖切换为注释中的社区 fork（JitPack 仓库已配好）。
+`arthenica/ffmpeg-kit` 和 `mobile-ffmpeg` 已在 2025 年从 Maven Central **删除**。目前用的是更老的 `com.writingminds:FFmpegAndroid:0.3.2`（ffmpeg 3.0.1，仅 armv7 + x86，**没有 arm64 二进制**）。
+
+- 大多数 Android 11 手机有 32 位兼容支持，armv7 二进制能正常运行
+- 纯 64 位设备（Pixel 7 及以后、部分新 Samsung 旗舰）会在 `loadBinary` 阶段失败
+- 如运行时崩溃或日志出现 `ffmpeg binary load failed`，需切换到 MJPEG 推流方案（无 ffmpeg 依赖、视频实时性更好但无音频直播；音频仍可存储）
 
 ## 使用
 
