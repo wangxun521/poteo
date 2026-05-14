@@ -63,25 +63,24 @@ class CameraRegistry(context: Context, provider: ProcessCameraProvider) {
                 selector = selector
             ))
 
-            // 2) Physical sub-cameras of this logical (where the ultrawide/tele live on Mi 9)
-            if (info != null) {
-                val physicals = try { info.physicalCameraInfos } catch (_: Throwable) { emptySet() }
-                physicals.forEach { phys ->
-                    val pid = try { Camera2CameraInfo.from(phys).cameraId } catch (_: Throwable) { return@forEach }
-                    if (pid == id) return@forEach   // sometimes the logical lists itself
-                    val pch = try { cm.getCameraCharacteristics(pid) } catch (_: Throwable) { null }
-                    val pFocal = pch?.let { focalFor(it) }
-                    val pFacing = pch?.let { facingFor(it) } ?: facing
-                    out.add(CameraEntry(
-                        id = "C${counter++}",
-                        cam2Id = id,
-                        physicalCam2Id = pid,
-                        label = composeLabel(pFacing, pFocal) + "  · id=$id/$pid",
-                        facing = pFacing,
-                        focalMm = pFocal,
-                        selector = info.cameraSelector
-                    ))
-                }
+            // 2) Physical sub-cameras of this logical (where the ultrawide/tele live on Mi 9).
+            // Use Camera2 directly because CameraX 1.3 doesn't expose physicalCameraInfos.
+            val physicalIds: Set<String> = try { ch.physicalCameraIds } catch (_: Throwable) { emptySet() }
+            physicalIds.forEach pIds@{ pid ->
+                if (pid == id) return@pIds
+                val pch = try { cm.getCameraCharacteristics(pid) } catch (_: Throwable) { return@pIds }
+                val pFocal = focalFor(pch)
+                val pFacing = facingFor(pch)
+                val selectorForPhys = info?.cameraSelector ?: selector
+                out.add(CameraEntry(
+                    id = "C${counter++}",
+                    cam2Id = id,
+                    physicalCam2Id = pid,
+                    label = composeLabel(pFacing, pFocal) + "  · id=$id/$pid",
+                    facing = pFacing,
+                    focalMm = pFocal,
+                    selector = selectorForPhys
+                ))
             }
         }
 
