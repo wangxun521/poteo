@@ -1,15 +1,21 @@
 package com.example.phonecam.streaming
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
 import android.graphics.ImageFormat
 import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.YuvImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import java.io.ByteArrayOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.concurrent.atomic.AtomicLong
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 
 /**
  * Holds the most recent camera frame as a JPEG, plus a monotonically increasing
@@ -19,8 +25,18 @@ import android.graphics.BitmapFactory
  */
 class MjpegStreamer(
     @Volatile var quality: Int = 60,   // JPEG quality 1-100
-    @Volatile var targetFps: Int = 10
+    @Volatile var targetFps: Int = 10,
+    @Volatile var watermark: Boolean = true
 ) : ImageAnalysis.Analyzer {
+
+    private val tsFmt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US)
+    private val textFill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE; isFakeBoldText = true
+    }
+    private val textStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.BLACK; style = Paint.Style.STROKE
+        isFakeBoldText = true
+    }
 
     @Volatile var latest: ByteArray? = null
         private set
@@ -67,17 +83,38 @@ class MjpegStreamer(
         val ok = yuv.compressToJpeg(Rect(0, 0, image.width, image.height), quality, baos)
         if (!ok) return null
         val rotation = image.imageInfo.rotationDegrees
-        if (rotation == 0) return baos.toByteArray()
-        // Rotate to display orientation so the browser shows it upright.
+        val needPostProcess = rotation != 0 || watermark
+        if (!needPostProcess) return baos.toByteArray()
+
         val src = baos.toByteArray()
         val bmp = BitmapFactory.decodeByteArray(src, 0, src.size) ?: return src
-        val matrix = Matrix().apply { postRotate(rotation.toFloat()) }
-        val rotated = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, matrix, true)
+        val processed = if (rotation != 0) {
+            val m = Matrix().apply { postRotate(rotation.toFloat()) }
+            val rot = Bitmap.createBitmap(bmp, 0, 0, bmp.width, bmp.height, m, true)
+            if (rot !== bmp) bmp.recycle()
+            rot
+        } else bmp
+
+        if (watermark) drawWatermark(processed)
+
         val out = ByteArrayOutputStream()
-        rotated.compress(Bitmap.CompressFormat.JPEG, quality, out)
-        bmp.recycle()
-        if (rotated !== bmp) rotated.recycle()
+        processed.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        processed.recycle()
         return out.toByteArray()
+    }
+
+    private fun drawWatermark(bmp: Bitmap) {
+        val text = tsFmt.format(Date())
+        val canvas = Canvas(bmp)
+        val textSize = (bmp.height * 0.045f).coerceIn(18f, 64f)
+        textFill.textSize = textSize
+        textStroke.textSize = textSize
+        textStroke.strokeWidth = (textSize * 0.12f).coerceAtLeast(2f)
+        val pad = textSize * 0.4f
+        val x = pad
+        val y = bmp.height - pad
+        canvas.drawText(text, x, y, textStroke)
+        canvas.drawText(text, x, y, textFill)
     }
 
     /**

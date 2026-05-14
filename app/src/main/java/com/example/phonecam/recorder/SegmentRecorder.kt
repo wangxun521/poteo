@@ -6,6 +6,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import android.util.Range
 import android.util.Size
 import androidx.annotation.RequiresPermission
 import androidx.camera.core.Camera
@@ -109,7 +110,9 @@ class SegmentRecorder(
             .setQualitySelector(QualitySelector.from(cfg.toQuality()))
             .setTargetVideoEncodingBitRate(cfg.recBitrate)
             .build()
-        val capture = VideoCapture.withOutput(recorder)
+        val capture = VideoCapture.Builder(recorder)
+            .setTargetFrameRate(Range(cfg.recFps.coerceIn(1, 60), cfg.recFps.coerceIn(1, 60)))
+            .build()
         val prev = Preview.Builder().build().also {
             pendingSurfaceProvider?.let(it::setSurfaceProvider)
         }

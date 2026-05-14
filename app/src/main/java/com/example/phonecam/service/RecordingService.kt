@@ -47,6 +47,7 @@ class RecordingService : LifecycleService() {
                 StreamConfig.save(this@RecordingService, currentConfig)
                 mjpegStreamer.quality = cfg.jpegQuality
                 mjpegStreamer.targetFps = cfg.streamFps
+                mjpegStreamer.watermark = cfg.watermark
                 true
             } catch (t: Throwable) {
                 Log.e(TAG, "applyConfig failed", t); false
@@ -113,7 +114,8 @@ class RecordingService : LifecycleService() {
         currentConfig = StreamConfig.load(this)
         mjpegStreamer = MjpegStreamer(
             quality = currentConfig.jpegQuality,
-            targetFps = currentConfig.streamFps
+            targetFps = currentConfig.streamFps,
+            watermark = currentConfig.watermark
         )
         httpServer = LocalHttpServer(this, HTTP_PORT, mjpegStreamer, binder, videoDir).also {
             try { it.start() } catch (e: Exception) { Log.e(TAG, "http start fail", e) }
@@ -122,7 +124,7 @@ class RecordingService : LifecycleService() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
-            cameraRegistry = CameraRegistry(cameraProvider)
+            cameraRegistry = CameraRegistry(this, cameraProvider)
             val entry = cameraRegistry.find(currentConfig.cameraId) ?: cameraRegistry.defaultBack()
             currentCameraId = entry.id
             currentConfig = currentConfig.copy(cameraId = entry.id)

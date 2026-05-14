@@ -13,10 +13,12 @@ data class StreamConfig(
     val saveAudio: Boolean,
     val recQuality: String,        // "SD" | "HD" | "FHD" | "UHD"
     val recBitrate: Int,           // bps
+    val recFps: Int,               // recording target fps 1..60
     val streamWidth: Int,
     val streamHeight: Int,
-    val streamFps: Int,            // 1..30
-    val jpegQuality: Int           // 1..100
+    val streamFps: Int,            // live stream fps 1..30
+    val jpegQuality: Int,          // 1..100
+    val watermark: Boolean         // burn date/time onto live MJPEG frames
 ) {
     fun toQuality(): Quality = when (recQuality.uppercase()) {
         "SD" -> Quality.SD
@@ -28,7 +30,7 @@ data class StreamConfig(
 
     fun toJson(): String {
         fun esc(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
-        return """{"cameraId":"${esc(cameraId)}","saveAudio":$saveAudio,"recQuality":"${esc(recQuality)}","recBitrate":$recBitrate,"streamWidth":$streamWidth,"streamHeight":$streamHeight,"streamFps":$streamFps,"jpegQuality":$jpegQuality}"""
+        return """{"cameraId":"${esc(cameraId)}","saveAudio":$saveAudio,"recQuality":"${esc(recQuality)}","recBitrate":$recBitrate,"recFps":$recFps,"streamWidth":$streamWidth,"streamHeight":$streamHeight,"streamFps":$streamFps,"jpegQuality":$jpegQuality,"watermark":$watermark}"""
     }
 
     companion object {
@@ -41,10 +43,12 @@ data class StreamConfig(
                 saveAudio = p.getBoolean("save_audio", true),
                 recQuality = p.getString("rec_quality", "HD") ?: "HD",
                 recBitrate = p.getInt("rec_bitrate", 2_000_000),
+                recFps = p.getInt("rec_fps", 30),
                 streamWidth = p.getInt("stream_w", 640),
                 streamHeight = p.getInt("stream_h", 480),
                 streamFps = p.getInt("stream_fps", 10),
-                jpegQuality = p.getInt("jpeg_q", 60)
+                jpegQuality = p.getInt("jpeg_q", 60),
+                watermark = p.getBoolean("watermark", true)
             )
         }
 
@@ -54,10 +58,12 @@ data class StreamConfig(
                 putBoolean("save_audio", c.saveAudio)
                 putString("rec_quality", c.recQuality)
                 putInt("rec_bitrate", c.recBitrate)
+                putInt("rec_fps", c.recFps)
                 putInt("stream_w", c.streamWidth)
                 putInt("stream_h", c.streamHeight)
                 putInt("stream_fps", c.streamFps)
                 putInt("jpeg_q", c.jpegQuality)
+                putBoolean("watermark", c.watermark)
             }.apply()
         }
     }

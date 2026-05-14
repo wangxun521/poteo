@@ -126,10 +126,12 @@ class LocalHttpServer(
             saveAudio = p["saveAudio"]?.toBooleanStrictOrNull() ?: cur.saveAudio,
             recQuality = p["recQuality"]?.uppercase() ?: cur.recQuality,
             recBitrate = p["recBitrate"]?.toIntOrNull()?.coerceIn(200_000, 20_000_000) ?: cur.recBitrate,
+            recFps = p["recFps"]?.toIntOrNull()?.coerceIn(1, 60) ?: cur.recFps,
             streamWidth = p["streamWidth"]?.toIntOrNull()?.coerceIn(120, 1920) ?: cur.streamWidth,
             streamHeight = p["streamHeight"]?.toIntOrNull()?.coerceIn(90, 1080) ?: cur.streamHeight,
             streamFps = p["streamFps"]?.toIntOrNull()?.coerceIn(1, 30) ?: cur.streamFps,
             jpegQuality = p["jpegQuality"]?.toIntOrNull()?.coerceIn(10, 95) ?: cur.jpegQuality,
+            watermark = p["watermark"]?.toBooleanStrictOrNull() ?: cur.watermark,
             cameraId = p["cameraId"] ?: cur.cameraId
         )
         val ok = binder.applyConfig(next)

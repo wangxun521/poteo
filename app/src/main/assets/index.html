@@ -151,8 +151,16 @@
           <input id="recBitrate" type="range" min="500000" max="8000000" step="100000" value="2000000" />
           <span class="val" id="recBitrateV">2.0 Mbps</span>
         </div>
+        <div class="row"><label>帧率</label>
+          <input id="recFps" type="range" min="5" max="60" value="30" />
+          <span class="val" id="recFpsV">30 fps</span>
+        </div>
         <div class="row"><label>录制音频</label>
           <input id="saveAudio" type="checkbox" checked />
+        </div>
+        <div class="row"><label>直播水印</label>
+          <input id="watermark" type="checkbox" checked />
+          <span style="color:#888;font-size:11px;margin-left:8px">在 MJPEG 直播帧上烧入日期时间</span>
         </div>
         <div class="row" style="margin-top:8px">
           <button onclick="applySettings()" class="primary">应用直播+录制设置</button>
@@ -167,9 +175,15 @@
     <div class="stage" id="recStage">
       <video id="player" controls playsinline></video>
     </div>
-    <div class="toolbar">
+    <div class="toolbar" style="flex-wrap:wrap;gap:6px">
       <button onclick="loadRecordings()">刷新</button>
       <button onclick="toggleFs('recStage','btnRecFs')" id="btnRecFs">全屏</button>
+      <label style="color:#aaa;font-size:12px;margin-left:8px">从</label>
+      <input id="recFrom" type="datetime-local" />
+      <label style="color:#aaa;font-size:12px">到</label>
+      <input id="recTo" type="datetime-local" />
+      <button onclick="setRecFilter()">应用</button>
+      <button onclick="clearRecFilter()">清除</button>
       <span id="recStatus" style="color:#888;font-size:12px;margin-left:auto">加载中…</span>
     </div>
     <div id="recList"></div>
@@ -215,9 +229,18 @@ function toggleFs(stageId, btnId) {
   const el = document.getElementById(stageId);
   const fs = el.classList.toggle('fs');
   document.getElementById(btnId).textContent = fs ? '退出全屏' : '全屏';
-  if (fs && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
-  else if (!fs && document.fullscreenElement) document.exitFullscreen().catch(()=>{});
 }
+// ESC exits CSS-fullscreen
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.stage.fs').forEach(s => {
+      s.classList.remove('fs');
+      // restore button text if there's one nearby
+      const ctrl = s.parentElement.querySelector('.ctrl, .toolbar');
+      if (ctrl) ctrl.querySelectorAll('button').forEach(b => { if (b.textContent==='退出全屏') b.textContent='全屏'; });
+    });
+  }
+});
 
 // ---------- cameras ----------
 async function loadCameras() {
@@ -275,10 +298,13 @@ async function loadConfig() {
     document.getElementById('recQuality').value = c.recQuality;
     document.getElementById('recBitrate').value = c.recBitrate;
     document.getElementById('recBitrateV').textContent = (c.recBitrate/1e6).toFixed(1) + ' Mbps';
+    document.getElementById('recFps').value = c.recFps;
+    document.getElementById('recFpsV').textContent = c.recFps + ' fps';
     document.getElementById('saveAudio').checked = c.saveAudio;
+    document.getElementById('watermark').checked = c.watermark;
   } catch (e) {}
 }
-['streamFps','jpegQ','recBitrate','storageLimit'].forEach(id => {
+['streamFps','jpegQ','recBitrate','recFps','storageLimit'].forEach(id => {
   const el = document.getElementById(id);
   if (!el) return;
   el.oninput = () => {
@@ -286,6 +312,7 @@ async function loadConfig() {
     if (id==='streamFps') document.getElementById('streamFpsV').textContent = v + ' fps';
     if (id==='jpegQ') document.getElementById('jpegQV').textContent = v;
     if (id==='recBitrate') document.getElementById('recBitrateV').textContent = (v/1e6).toFixed(1) + ' Mbps';
+    if (id==='recFps') document.getElementById('recFpsV').textContent = v + ' fps';
     if (id==='storageLimit') document.getElementById('storageLimitV').textContent = v.toFixed(1) + ' GB';
   };
 });
@@ -298,7 +325,9 @@ async function applySettings() {
     jpegQuality: document.getElementById('jpegQ').value,
     recQuality: document.getElementById('recQuality').value,
     recBitrate: document.getElementById('recBitrate').value,
-    saveAudio: document.getElementById('saveAudio').checked ? 'true' : 'false'
+    recFps: document.getElementById('recFps').value,
+    saveAudio: document.getElementById('saveAudio').checked ? 'true' : 'false',
+    watermark: document.getElementById('watermark').checked ? 'true' : 'false'
   });
   const s = document.getElementById('settingsStatus');
   s.textContent = '应用中...';
@@ -343,6 +372,28 @@ async function applyStorage() {
 
 // ---------- recordings ----------
 let currentPlaying = null;
+let recFromMs = null, recToMs = null;
+
+// Parse filename like 20260514_153045.mp4 → epoch ms (LOCAL time).
+function parseFnDate(name) {
+  const m = /^(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.mp4$/.exec(name);
+  if (!m) return null;
+  return new Date(+m[1], +m[2]-1, +m[3], +m[4], +m[5], +m[6]).getTime();
+}
+function setRecFilter() {
+  const f = document.getElementById('recFrom').value;
+  const t = document.getElementById('recTo').value;
+  recFromMs = f ? new Date(f).getTime() : null;
+  recToMs = t ? new Date(t).getTime() : null;
+  loadRecordings();
+}
+function clearRecFilter() {
+  document.getElementById('recFrom').value = '';
+  document.getElementById('recTo').value = '';
+  recFromMs = null; recToMs = null;
+  loadRecordings();
+}
+
 async function loadRecordings() {
   const list = document.getElementById('recList');
   const st = document.getElementById('recStatus');
@@ -351,11 +402,21 @@ async function loadRecordings() {
     const r = await fetch('/recordings').then(r => r.json());
     list.innerHTML = '';
     if (!r.items || r.items.length === 0) { st.textContent = '暂无录像'; return; }
-    st.textContent = r.items.length + ' 段录像';
-    r.items.forEach(it => {
+    let items = r.items;
+    if (recFromMs != null || recToMs != null) {
+      items = items.filter(it => {
+        const ts = parseFnDate(it.name) ?? it.mtime;
+        if (recFromMs != null && ts < recFromMs) return false;
+        if (recToMs != null && ts > recToMs) return false;
+        return true;
+      });
+    }
+    st.textContent = items.length + ' / ' + r.items.length + ' 段';
+    items.forEach(it => {
       const div = document.createElement('div');
       div.className = 'rec' + (it.name === currentPlaying ? ' playing' : '');
-      const date = new Date(it.mtime).toLocaleString();
+      const ts = parseFnDate(it.name) ?? it.mtime;
+      const date = new Date(ts).toLocaleString();
       const mb = (it.size / 1048576).toFixed(1);
       div.innerHTML = '<div class="nm">' + it.name + '</div>' +
                       '<div class="sz">' + mb + ' MB · ' + date + '</div>';
