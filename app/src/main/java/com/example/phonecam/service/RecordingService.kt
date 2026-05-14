@@ -7,8 +7,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.pm.ServiceInfo
+import android.os.Binder
 import android.os.Build
+import android.os.IBinder
 import android.os.PowerManager
+import androidx.camera.core.Preview
 import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
@@ -25,6 +28,15 @@ import com.example.phonecam.streaming.LocalHttpServer
 import java.io.File
 
 class RecordingService : LifecycleService() {
+
+    inner class LocalBinder : Binder() {
+        fun setPreviewSurfaceProvider(p: Preview.SurfaceProvider?) {
+            if (::segmentRecorder.isInitialized) segmentRecorder.setPreviewSurfaceProvider(p)
+        }
+        fun isRecorderReady(): Boolean = ::segmentRecorder.isInitialized
+    }
+    private val binder = LocalBinder()
+    override fun onBind(intent: Intent): IBinder { super.onBind(intent); return binder }
 
     companion object {
         const val HTTP_PORT = 8080

@@ -9,6 +9,7 @@ import android.util.Log
 import androidx.annotation.RequiresPermission
 import androidx.camera.core.CameraSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.core.Preview
 import androidx.camera.video.FileOutputOptions
 import androidx.camera.video.Quality
 import androidx.camera.video.QualitySelector
@@ -40,6 +41,7 @@ class SegmentRecorder(
     private val tag = "SegmentRecorder"
     private val main = Handler(Looper.getMainLooper())
     private var videoCapture: VideoCapture<Recorder>? = null
+    private var preview: Preview? = null
     private var currentRecording: Recording? = null
     private var currentFile: File? = null
     private val nameFmt = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
@@ -52,10 +54,20 @@ class SegmentRecorder(
             .setTargetVideoEncodingBitRate(bitrateController.currentBitrate())
             .build()
         val capture = VideoCapture.withOutput(recorder)
+        val prev = Preview.Builder().build()
         videoCapture = capture
+        preview = prev
         cameraProvider.unbindAll()
-        cameraProvider.bindToLifecycle(lifecycleOwner, selector, capture)
+        // Bind both UseCases. setSurfaceProvider(null) by default => preview is
+        // running but discarded; toggling provider on/off costs nothing and never
+        // interrupts recording.
+        cameraProvider.bindToLifecycle(lifecycleOwner, selector, capture, prev)
         startNextSegment()
+    }
+
+    /** Attach or detach a UI Surface for live preview. Pass null to disable. */
+    fun setPreviewSurfaceProvider(provider: Preview.SurfaceProvider?) {
+        preview?.setSurfaceProvider(provider)
     }
 
     @SuppressLint("MissingPermission")
