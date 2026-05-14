@@ -33,6 +33,8 @@ class LocalHttpServer(
                 path == "switch" -> switchCamera(session)
                 path == "config" -> if (session.method == Method.POST) applyConfig(session) else configJson()
                 path == "thermal" -> jsonOk(thermal.toJson())
+                path == "storage" -> if (session.method == Method.POST) applyStorage(session) else storageJson()
+                path == "zoom" -> if (session.method == Method.POST) applyZoom(session) else zoomJson()
                 path == "recordings" -> recordingsJson()
                 path.startsWith("recordings/") -> serveRecording(session, path.removePrefix("recordings/"))
                 else -> json404("not found")
@@ -178,6 +180,31 @@ class LocalHttpServer(
         resp.addHeader("Accept-Ranges", "bytes")
         resp.addHeader("Content-Length", length.toString())
         return resp
+    }
+
+    // ----- storage -----
+    private fun storageJson(): Response {
+        val (used, limit, rest) = binder.storageInfo()
+        val (free, count) = rest
+        return jsonOk("""{"usedBytes":$used,"limitBytes":$limit,"deviceFreeBytes":$free,"fileCount":$count}""")
+    }
+    private fun applyStorage(session: IHTTPSession): Response {
+        val gb = session.parms["limitGb"]?.toDoubleOrNull()
+            ?: return json400("missing limitGb")
+        if (gb < 0.1 || gb > 200.0) return json400("limitGb out of range 0.1..200")
+        binder.setStorageLimitBytes((gb * 1024L * 1024 * 1024).toLong())
+        return storageJson()
+    }
+
+    // ----- zoom -----
+    private fun zoomJson(): Response {
+        val z = binder.zoom() ?: return jsonOk("""{"available":false}""")
+        return jsonOk("""{"available":true,"min":${z[0]},"max":${z[1]},"current":${z[2]}}""")
+    }
+    private fun applyZoom(session: IHTTPSession): Response {
+        val r = session.parms["ratio"]?.toFloatOrNull() ?: return json400("missing ratio")
+        val ok = binder.setZoom(r)
+        return if (ok) zoomJson() else json400("zoom failed")
     }
 
     // ----- helpers -----

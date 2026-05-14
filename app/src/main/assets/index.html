@@ -6,53 +6,65 @@
 <title>PhoneCam Live</title>
 <style>
   *{box-sizing:border-box}
-  html,body{margin:0;background:#0b0b0b;color:#ddd;font-family:-apple-system,Segoe UI,sans-serif;height:100%;font-size:14px}
-  #app{display:flex;flex-direction:column;height:100%}
-  #tabs{display:flex;background:#1a1a1a;border-bottom:1px solid #2a2a2a;align-items:center}
-  #tabs button{flex:1;padding:10px;background:transparent;color:#aaa;border:0;cursor:pointer;font-size:14px}
+  html,body{margin:0;background:#0b0b0b;color:#ddd;font-family:-apple-system,Segoe UI,sans-serif;height:100%;font-size:14px;overflow:hidden}
+  #app{display:flex;flex-direction:column;height:100vh}
+
+  #tabs{display:flex;background:#1a1a1a;border-bottom:1px solid #2a2a2a;align-items:center;flex:0 0 auto}
+  #tabs button{flex:0 0 auto;padding:10px 16px;background:transparent;color:#aaa;border:0;cursor:pointer;font-size:14px}
   #tabs button.active{color:#fff;background:#252525;border-bottom:2px solid #4a9eff}
-  #temps{display:flex;gap:6px;padding:0 10px;font-size:11px;font-family:monospace;color:#aaa;white-space:nowrap}
-  .tbadge{padding:2px 6px;border-radius:3px;background:#252525}
+  #tabs .grow{flex:1}
+
+  #temps{display:flex;gap:6px;padding:0 10px;font-size:11px;font-family:monospace;color:#aaa;white-space:nowrap;position:relative}
+  .tbadge{padding:3px 8px;border-radius:3px;background:#252525;cursor:pointer;position:relative}
   .tbadge.warn{background:#7a4a00;color:#ffd28a}
   .tbadge.hot{background:#7a1c1c;color:#ffb0b0}
-  .tbadge details{display:inline}
-  .tbadge summary{list-style:none;cursor:pointer}
-  .tbadge summary::-webkit-details-marker{display:none}
-  .tbadge .all{position:absolute;background:#1a1a1a;border:1px solid #333;padding:6px 10px;border-radius:4px;margin-top:4px;font-size:11px;line-height:1.6;z-index:100;min-width:180px}
-  .page{display:none;flex:1;min-height:0;overflow:auto}
+  .tdetail{display:none;position:absolute;right:0;top:100%;background:#1a1a1a;border:1px solid #333;padding:6px 10px;border-radius:4px;margin-top:4px;font-size:11px;line-height:1.6;z-index:100;min-width:200px;text-align:left}
+  .tdetail.open{display:block}
+
+  .page{display:none;flex:1;min-height:0;overflow:hidden}
   .page.active{display:flex;flex-direction:column}
 
-  #stage{flex:1;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;min-height:200px;position:relative}
-  #stage img,#stage video{max-width:100%;max-height:100%;object-fit:contain;transition:transform .2s}
-  #stage.fs{position:fixed;inset:0;z-index:9999;background:#000}
+  /* fills available height, letterboxes content */
+  .stage{flex:1;min-height:0;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
+  .stage img,.stage video{width:100%;height:100%;object-fit:contain;transition:transform .2s}
+  .stage.fs{position:fixed;inset:0;z-index:9999;background:#000}
 
-  .ctrl{padding:8px 12px;background:#161616;border-top:1px solid #222;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .ctrl{padding:8px 12px;background:#161616;border-top:1px solid #222;display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex:0 0 auto}
   .ctrl button,.ctrl select,.ctrl input{background:#2a2a2a;color:#fff;border:1px solid #3a3a3a;padding:6px 10px;border-radius:4px;font-size:13px}
   .ctrl button{cursor:pointer}
   .ctrl button:hover{background:#3a3a3a}
-  .ctrl button.on{background:#1d6fc7;border-color:#1d6fc7}
-  .ctrl label{color:#aaa;font-size:12px;margin-right:4px}
   #status{color:#888;font-size:12px;margin-left:auto}
 
-  .cams{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;background:#161616;border-top:1px solid #222}
+  .cams{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;background:#161616;border-top:1px solid #222;flex:0 0 auto;align-items:center}
   .cam{padding:6px 12px;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:16px;cursor:pointer;font-size:13px;color:#fff}
   .cam.active{background:#1d6fc7;border-color:#1d6fc7}
+  #zoomBar{display:none;flex:1;align-items:center;gap:8px;min-width:180px;color:#aaa;font-size:12px}
+  #zoomBar input{flex:1}
 
-  .panel{padding:12px;color:#ccc}
+  /* settings + recordings get their own scroll containers */
+  .scroll{flex:1;min-height:0;overflow:auto;padding:12px}
   .panel h3{margin:8px 0 4px;font-size:14px;color:#fff}
+  .panel .sect{background:#141414;border:1px solid #222;border-radius:6px;padding:10px 12px;margin-bottom:10px}
   .row{display:flex;align-items:center;gap:8px;margin:6px 0}
   .row label{min-width:90px;color:#aaa;font-size:12px}
   .row input[type=range]{flex:1}
-  .row .val{min-width:70px;text-align:right;font-family:monospace;color:#9cd9ff}
+  .row .val{min-width:80px;text-align:right;font-family:monospace;color:#9cd9ff}
 
-  #recList{padding:8px}
-  .rec{display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid #222;cursor:pointer}
+  .bar{height:10px;background:#222;border-radius:5px;overflow:hidden;margin:6px 0}
+  .bar > i{display:block;height:100%;background:linear-gradient(90deg,#4a9eff,#1d6fc7)}
+  .bar.full > i{background:linear-gradient(90deg,#ff8a00,#c70000)}
+
+  .recsplit{flex:1;display:flex;flex-direction:column;min-height:0}
+  #recList{flex:1;min-height:0;overflow:auto;background:#0b0b0b}
+  .rec{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid #222;cursor:pointer}
   .rec:hover{background:#1a1a1a}
-  .rec .nm{flex:1;font-family:monospace;font-size:13px}
-  .rec .sz{color:#888;font-size:12px}
+  .rec.playing{background:#1d3a5c}
+  .rec .nm{flex:1;font-family:monospace;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .rec .sz{color:#888;font-size:11px;flex:0 0 auto}
 
-  #player{background:#000;width:100%;height:auto;display:none}
-  #player.show{display:block}
+  .toolbar{padding:6px 12px;background:#161616;border-bottom:1px solid #222;display:flex;gap:8px;align-items:center;flex:0 0 auto}
+
+  .primary{background:#1d6fc7!important;border-color:#1d6fc7!important}
 </style>
 </head>
 <body>
@@ -61,79 +73,104 @@
     <button class="active" data-tab="live">实时</button>
     <button data-tab="settings">设置</button>
     <button data-tab="recordings">回放</button>
+    <span class="grow"></span>
     <div id="temps">
-      <details class="tbadge" id="tBadgeWrap">
-        <summary id="tBadge">温度…</summary>
-        <div class="all" id="tDetail">加载中…</div>
-      </details>
+      <div class="tbadge" id="tBadge" onclick="document.getElementById('tDetail').classList.toggle('open')">温度…</div>
+      <div class="tdetail" id="tDetail">加载中…</div>
     </div>
   </div>
 
   <!-- LIVE -->
   <div class="page active" data-page="live">
-    <div id="stage"><img id="liveImg" alt="live" /></div>
+    <div class="stage" id="liveStage"><img id="liveImg" alt="live" /></div>
     <div class="ctrl">
       <button onclick="reconnect()">重连</button>
       <button onclick="toggleSnap()" id="btnSnap">快照模式</button>
       <button onclick="rotateView()">↻ 旋转</button>
-      <button onclick="toggleFs()" id="btnFs">全屏</button>
+      <button onclick="toggleFs('liveStage','btnFs')" id="btnFs">全屏</button>
       <span id="status">连接中…</span>
     </div>
-    <div id="cams" class="cams">摄像头加载中…</div>
+    <div class="cams">
+      <div id="cams" style="display:flex;flex-wrap:wrap;gap:6px">摄像头加载中…</div>
+      <div id="zoomBar">
+        <span>变焦</span>
+        <input id="zoomSlider" type="range" min="1" max="10" step="0.1" value="1" />
+        <span class="val" id="zoomV">1.0×</span>
+      </div>
+    </div>
   </div>
 
   <!-- SETTINGS -->
   <div class="page" data-page="settings">
-    <div class="panel">
-      <h3>直播 (浏览器)</h3>
-      <div class="row"><label>分辨率</label>
-        <select id="streamRes">
-          <option value="320x240">320×240 (省流)</option>
-          <option value="480x360">480×360</option>
-          <option value="640x480" selected>640×480 (默认)</option>
-          <option value="960x720">960×720</option>
-          <option value="1280x720">1280×720</option>
-        </select>
-      </div>
-      <div class="row"><label>帧率</label>
-        <input id="streamFps" type="range" min="1" max="30" value="10" />
-        <span class="val" id="streamFpsV">10 fps</span>
-      </div>
-      <div class="row"><label>JPEG 质量</label>
-        <input id="jpegQ" type="range" min="20" max="95" value="60" />
-        <span class="val" id="jpegQV">60</span>
+    <div class="scroll panel">
+      <div class="sect">
+        <h3>存储使用</h3>
+        <div id="storageText" style="font-size:12px;color:#aaa;margin-bottom:4px">读取中…</div>
+        <div class="bar" id="storageBar"><i style="width:0%"></i></div>
+        <div class="row" style="margin-top:10px"><label>上限</label>
+          <input id="storageLimit" type="range" min="0.5" max="64" step="0.5" value="10" />
+          <span class="val" id="storageLimitV">10.0 GB</span>
+        </div>
+        <div class="row"><button onclick="applyStorage()" class="primary">应用容量上限</button>
+          <span id="storageStatus" style="color:#888;margin-left:12px;font-size:12px"></span>
+        </div>
       </div>
 
-      <h3>录制 (本地存储)</h3>
-      <div class="row"><label>分辨率档</label>
-        <select id="recQuality">
-          <option value="SD">SD (480p)</option>
-          <option value="HD" selected>HD (720p)</option>
-          <option value="FHD">FHD (1080p)</option>
-          <option value="UHD">UHD (4K)</option>
-        </select>
-      </div>
-      <div class="row"><label>码率</label>
-        <input id="recBitrate" type="range" min="500000" max="8000000" step="100000" value="2000000" />
-        <span class="val" id="recBitrateV">2.0 Mbps</span>
-      </div>
-      <div class="row"><label>录制音频</label>
-        <input id="saveAudio" type="checkbox" checked />
+      <div class="sect">
+        <h3>直播 (浏览器)</h3>
+        <div class="row"><label>分辨率</label>
+          <select id="streamRes">
+            <option value="320x240">320×240 (省流)</option>
+            <option value="480x360">480×360</option>
+            <option value="640x480" selected>640×480 (默认)</option>
+            <option value="960x720">960×720</option>
+            <option value="1280x720">1280×720</option>
+          </select>
+        </div>
+        <div class="row"><label>帧率</label>
+          <input id="streamFps" type="range" min="1" max="30" value="10" />
+          <span class="val" id="streamFpsV">10 fps</span>
+        </div>
+        <div class="row"><label>JPEG 质量</label>
+          <input id="jpegQ" type="range" min="20" max="95" value="60" />
+          <span class="val" id="jpegQV">60</span>
+        </div>
       </div>
 
-      <div class="row" style="margin-top:14px">
-        <button onclick="applySettings()" style="background:#1d6fc7;border:0;color:#fff;padding:8px 16px;border-radius:4px;cursor:pointer">应用</button>
-        <span id="settingsStatus" style="color:#888;margin-left:12px"></span>
+      <div class="sect">
+        <h3>录制 (本地存储)</h3>
+        <div class="row"><label>分辨率档</label>
+          <select id="recQuality">
+            <option value="SD">SD (480p)</option>
+            <option value="HD" selected>HD (720p)</option>
+            <option value="FHD">FHD (1080p)</option>
+            <option value="UHD">UHD (4K)</option>
+          </select>
+        </div>
+        <div class="row"><label>码率</label>
+          <input id="recBitrate" type="range" min="500000" max="8000000" step="100000" value="2000000" />
+          <span class="val" id="recBitrateV">2.0 Mbps</span>
+        </div>
+        <div class="row"><label>录制音频</label>
+          <input id="saveAudio" type="checkbox" checked />
+        </div>
+        <div class="row" style="margin-top:8px">
+          <button onclick="applySettings()" class="primary">应用直播+录制设置</button>
+          <span id="settingsStatus" style="color:#888;margin-left:12px;font-size:12px"></span>
+        </div>
       </div>
     </div>
   </div>
 
   <!-- RECORDINGS -->
   <div class="page" data-page="recordings">
-    <video id="player" controls playsinline></video>
-    <div style="padding:8px 12px;display:flex;gap:8px;background:#161616;border-bottom:1px solid #222">
+    <div class="stage" id="recStage">
+      <video id="player" controls playsinline></video>
+    </div>
+    <div class="toolbar">
       <button onclick="loadRecordings()">刷新</button>
-      <span id="recStatus" style="color:#888;align-self:center">加载中…</span>
+      <button onclick="toggleFs('recStage','btnRecFs')" id="btnRecFs">全屏</button>
+      <span id="recStatus" style="color:#888;font-size:12px;margin-left:auto">加载中…</span>
     </div>
     <div id="recList"></div>
   </div>
@@ -145,13 +182,12 @@ document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x === b));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === b.dataset.tab));
   if (b.dataset.tab === 'recordings') loadRecordings();
-  if (b.dataset.tab === 'settings') loadConfig();
+  if (b.dataset.tab === 'settings') { loadConfig(); loadStorage(); }
 });
 
 // ---------- live ----------
 const img = document.getElementById('liveImg');
 const status = document.getElementById('status');
-const stage = document.getElementById('stage');
 let mode = 'mjpeg', snapTimer = null, rotation = 0;
 
 function attach() {
@@ -175,11 +211,12 @@ function rotateView() {
   rotation = (rotation + 90) % 360;
   img.style.transform = 'rotate(' + rotation + 'deg)';
 }
-function toggleFs() {
-  const fs = stage.classList.toggle('fs');
-  document.getElementById('btnFs').textContent = fs ? '退出全屏' : '全屏';
-  if (fs && stage.requestFullscreen) stage.requestFullscreen().catch(()=>{});
-  if (!fs && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+function toggleFs(stageId, btnId) {
+  const el = document.getElementById(stageId);
+  const fs = el.classList.toggle('fs');
+  document.getElementById(btnId).textContent = fs ? '退出全屏' : '全屏';
+  if (fs && el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+  else if (!fs && document.fullscreenElement) document.exitFullscreen().catch(()=>{});
 }
 
 // ---------- cameras ----------
@@ -195,14 +232,36 @@ async function loadCameras() {
       b.textContent = cam.label;
       b.onclick = async () => {
         b.textContent = '切换中…';
-        const res = await fetch('/switch?id=' + encodeURIComponent(cam.id), { method: 'POST' }).then(r => r.json()).catch(()=>null);
-        await loadCameras();
-        if (res && res.ok) attach();
+        await fetch('/switch?id=' + encodeURIComponent(cam.id), { method: 'POST' }).catch(()=>{});
+        await loadCameras(); await loadZoom(); attach();
       };
       c.appendChild(b);
     });
   } catch (e) { document.getElementById('cams').textContent = '加载失败: ' + e.message; }
 }
+
+// ---------- zoom ----------
+async function loadZoom() {
+  try {
+    const z = await fetch('/zoom').then(r => r.json());
+    const bar = document.getElementById('zoomBar');
+    if (!z.available || z.max <= z.min + 0.01) { bar.style.display='none'; return; }
+    bar.style.display = 'flex';
+    const sl = document.getElementById('zoomSlider');
+    sl.min = z.min; sl.max = z.max; sl.step = 0.1; sl.value = z.current;
+    document.getElementById('zoomV').textContent = (+z.current).toFixed(1) + '×';
+  } catch (e) {}
+}
+document.getElementById('zoomSlider').oninput = () => {
+  const v = parseFloat(document.getElementById('zoomSlider').value);
+  document.getElementById('zoomV').textContent = v.toFixed(1) + '×';
+};
+let zoomDebounce = null;
+document.getElementById('zoomSlider').onchange = () => {
+  const v = parseFloat(document.getElementById('zoomSlider').value);
+  clearTimeout(zoomDebounce);
+  zoomDebounce = setTimeout(() => fetch('/zoom?ratio=' + v, { method: 'POST' }), 80);
+};
 
 // ---------- config ----------
 async function loadConfig() {
@@ -219,13 +278,15 @@ async function loadConfig() {
     document.getElementById('saveAudio').checked = c.saveAudio;
   } catch (e) {}
 }
-['streamFps','jpegQ','recBitrate'].forEach(id => {
+['streamFps','jpegQ','recBitrate','storageLimit'].forEach(id => {
   const el = document.getElementById(id);
+  if (!el) return;
   el.oninput = () => {
-    const v = parseInt(el.value);
+    const v = parseFloat(el.value);
     if (id==='streamFps') document.getElementById('streamFpsV').textContent = v + ' fps';
     if (id==='jpegQ') document.getElementById('jpegQV').textContent = v;
     if (id==='recBitrate') document.getElementById('recBitrateV').textContent = (v/1e6).toFixed(1) + ' Mbps';
+    if (id==='storageLimit') document.getElementById('storageLimitV').textContent = v.toFixed(1) + ' GB';
   };
 });
 async function applySettings() {
@@ -244,11 +305,44 @@ async function applySettings() {
   try {
     const r = await fetch('/config?' + p.toString(), { method: 'POST' }).then(r => r.json());
     s.textContent = r.ok ? '已应用 ✓' : ('失败: ' + (r.error || ''));
-    setTimeout(() => attach(), 1500);  // give recorder a moment to rebuild
+    setTimeout(() => { attach(); loadZoom(); }, 1500);
   } catch (e) { s.textContent = '失败: ' + e.message; }
 }
 
+// ---------- storage ----------
+function fmtGB(b){ return (b/1073741824).toFixed(2) + ' GB'; }
+async function loadStorage() {
+  try {
+    const s = await fetch('/storage').then(r => r.json());
+    const pct = s.limitBytes > 0 ? Math.min(100, s.usedBytes / s.limitBytes * 100) : 0;
+    document.getElementById('storageText').textContent =
+      '已用 ' + fmtGB(s.usedBytes) + ' / 上限 ' + fmtGB(s.limitBytes) +
+      ' · 设备空闲 ' + fmtGB(s.deviceFreeBytes) +
+      ' · 文件 ' + s.fileCount + ' 段';
+    const bar = document.getElementById('storageBar');
+    bar.classList.toggle('full', pct > 85);
+    bar.querySelector('i').style.width = pct + '%';
+    const limGb = s.limitBytes / 1073741824;
+    const sl = document.getElementById('storageLimit');
+    sl.value = limGb.toFixed(1);
+    document.getElementById('storageLimitV').textContent = limGb.toFixed(1) + ' GB';
+  } catch (e) {
+    document.getElementById('storageText').textContent = '读取失败: ' + e.message;
+  }
+}
+async function applyStorage() {
+  const v = document.getElementById('storageLimit').value;
+  const st = document.getElementById('storageStatus');
+  st.textContent = '应用中...';
+  try {
+    await fetch('/storage?limitGb=' + v, { method: 'POST' }).then(r => r.json());
+    st.textContent = '已应用 ✓';
+    loadStorage();
+  } catch (e) { st.textContent = '失败: ' + e.message; }
+}
+
 // ---------- recordings ----------
+let currentPlaying = null;
 async function loadRecordings() {
   const list = document.getElementById('recList');
   const st = document.getElementById('recStatus');
@@ -257,10 +351,10 @@ async function loadRecordings() {
     const r = await fetch('/recordings').then(r => r.json());
     list.innerHTML = '';
     if (!r.items || r.items.length === 0) { st.textContent = '暂无录像'; return; }
-    st.textContent = r.items.length + ' 段';
+    st.textContent = r.items.length + ' 段录像';
     r.items.forEach(it => {
       const div = document.createElement('div');
-      div.className = 'rec';
+      div.className = 'rec' + (it.name === currentPlaying ? ' playing' : '');
       const date = new Date(it.mtime).toLocaleString();
       const mb = (it.size / 1048576).toFixed(1);
       div.innerHTML = '<div class="nm">' + it.name + '</div>' +
@@ -273,9 +367,11 @@ async function loadRecordings() {
 function playRecording(name) {
   const p = document.getElementById('player');
   p.src = '/recordings/' + encodeURIComponent(name);
-  p.classList.add('show');
   p.play().catch(()=>{});
-  p.scrollIntoView({behavior:'smooth'});
+  currentPlaying = name;
+  document.querySelectorAll('.rec').forEach(el => {
+    el.classList.toggle('playing', el.querySelector('.nm').textContent === name);
+  });
 }
 
 // ---------- thermal ----------
@@ -283,20 +379,16 @@ async function loadTemps() {
   try {
     const t = await fetch('/thermal').then(r => r.json());
     const badge = document.getElementById('tBadge');
-    const wrap = document.getElementById('tBadgeWrap').parentElement;
     const detail = document.getElementById('tDetail');
     const cpu = t.cpuC, bat = t.batteryC;
     const headline = cpu != null ? cpu : bat;
     let label = '温度 -';
+    if (headline != null) label = (cpu != null ? 'CPU' : '电池') + ' ' + headline.toFixed(1) + '°C';
+    badge.classList.remove('warn','hot');
+    // Tuned for SD855-era thermal envelope: warn 55, hot 70
     if (headline != null) {
-      const tag = cpu != null ? 'CPU' : '电池';
-      label = tag + ' ' + headline.toFixed(1) + '°C';
-    }
-    const wrapEl = document.getElementById('tBadgeWrap');
-    wrapEl.classList.remove('warn','hot');
-    if (headline != null) {
-      if (headline >= 55) wrapEl.classList.add('hot');
-      else if (headline >= 45) wrapEl.classList.add('warn');
+      if (headline >= 70) badge.classList.add('hot');
+      else if (headline >= 55) badge.classList.add('warn');
     }
     badge.textContent = label;
     let html = '';
@@ -304,18 +396,22 @@ async function loadTemps() {
     if (cpu != null) html += 'CPU(峰): ' + cpu.toFixed(1) + '°C<hr style="border:0;border-top:1px solid #333">';
     if (t.zones && t.zones.length) {
       html += t.zones.map(z => z.name + ': ' + z.tempC.toFixed(1) + '°C').join('<br>');
-    } else {
-      html += '<i>系统未暴露任何热区</i>';
-    }
+    } else { html += '<i>系统未暴露任何热区</i>'; }
     detail.innerHTML = html;
   } catch (e) {
     document.getElementById('tBadge').textContent = '温度: ?';
   }
 }
 
+// click anywhere to close temp detail
+document.addEventListener('click', e => {
+  if (!e.target.closest('#temps')) document.getElementById('tDetail').classList.remove('open');
+});
+
 // boot
 attach();
 loadCameras();
+loadZoom();
 loadTemps();
 setInterval(loadCameras, 30000);
 setInterval(loadTemps, 5000);

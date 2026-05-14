@@ -46,6 +46,10 @@ CameraX
 | GET | `/recordings` | 录像列表 `{"items":[{"name":"...","size":..,"mtime":..}]}` |
 | GET | `/recordings/<name>` | 播放/下载 MP4，支持 `Range:` 拖进度条 |
 | GET | `/thermal` | `{"cpuC":45.2,"batteryC":32.1,"zones":[{"name":"cpu-0-0-usr","tempC":45.2},...]}` |
+| GET | `/storage` | `{"usedBytes":...,"limitBytes":...,"deviceFreeBytes":...,"fileCount":...}` |
+| POST | `/storage?limitGb=10` | 调整本地容量上限（0.1–200 GB） |
+| GET | `/zoom` | `{"available":true,"min":0.6,"max":10.0,"current":1.0}` |
+| POST | `/zoom?ratio=2.5` | 设置变焦倍率（含跨物理镜头切换） |
 
 ## 项目结构
 

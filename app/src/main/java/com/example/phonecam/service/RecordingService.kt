@@ -53,6 +53,26 @@ class RecordingService : LifecycleService() {
             }
         }
         fun videoDir(): File = videoDir
+
+        // Storage
+        fun storageInfo(): Triple<Long, Long, Pair<Long, Int>> = Triple(
+            storage.usedBytes(),
+            storage.limitBytes,
+            storage.deviceFreeBytes() to storage.fileCount()
+        )
+        fun setStorageLimitBytes(limit: Long) {
+            val clamped = limit.coerceAtLeast(100L * 1024 * 1024)  // floor 100 MB
+            storage.limitBytes = clamped
+            getSharedPreferences("cfg", MODE_PRIVATE).edit().putLong("storage_limit", clamped).apply()
+            storage.gc()
+        }
+
+        // Zoom
+        fun zoom(): FloatArray? {
+            val z = segmentRecorder.zoomState() ?: return null
+            return floatArrayOf(z.minZoomRatio, z.maxZoomRatio, z.zoomRatio)
+        }
+        fun setZoom(r: Float): Boolean = segmentRecorder.setZoomRatio(r)
     }
     private val binder = LocalBinder()
     override fun onBind(intent: Intent): IBinder { super.onBind(intent); return binder }
@@ -86,7 +106,9 @@ class RecordingService : LifecycleService() {
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "phonecam:rec").apply { acquire() }
 
         videoDir = File(getExternalFilesDir(null), "videos").apply { mkdirs() }
-        storage = CircularStorageManager(videoDir, STORAGE_LIMIT_BYTES)
+        val savedLimit = getSharedPreferences("cfg", MODE_PRIVATE)
+            .getLong("storage_limit", STORAGE_LIMIT_BYTES)
+        storage = CircularStorageManager(videoDir, savedLimit)
         bitrateController = BitrateController()
         currentConfig = StreamConfig.load(this)
         mjpegStreamer = MjpegStreamer(
