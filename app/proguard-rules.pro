@@ -1,0 +1,2 @@
+-keep class com.arthenica.** { *; }
+-keep class fi.iki.elonen.** { *; }

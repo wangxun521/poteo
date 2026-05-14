@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>PhoneCam Live</title>
+<style>
+  html,body{margin:0;background:#000;color:#ddd;font-family:sans-serif;height:100%}
+  #wrap{display:flex;flex-direction:column;height:100%}
+  video{flex:1;background:#000;width:100%;object-fit:contain}
+  #bar{padding:8px 12px;font-size:13px;background:#111;display:flex;justify-content:space-between}
+  button{background:#444;color:#fff;border:0;padding:6px 12px;border-radius:4px;cursor:pointer}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <video id="v" controls autoplay muted playsinline></video>
+  <div id="bar">
+    <span id="status">连接中...</span>
+    <button onclick="reload()">重新加载</button>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.7/dist/hls.min.js"></script>
+<script>
+const v = document.getElementById('v');
+const status = document.getElementById('status');
+const src = '/live.m3u8';
+let hls;
+function attach(){
+  if (Hls.isSupported()){
+    hls = new Hls({ liveSyncDurationCount: 2, lowLatencyMode: true });
+    hls.loadSource(src);
+    hls.attachMedia(v);
+    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{ status.textContent='已连接'; v.play().catch(()=>{}); });
+    hls.on(Hls.Events.ERROR, (e,d)=>{ status.textContent='错误: '+d.details; });
+  } else if (v.canPlayType('application/vnd.apple.mpegurl')){
+    v.src = src; v.play();
+    status.textContent = '已连接(原生 HLS)';
+  } else {
+    status.textContent = '浏览器不支持 HLS';
+  }
+}
+function reload(){ if(hls){hls.destroy();} attach(); }
+attach();
+</script>
+</body>
+</html>
