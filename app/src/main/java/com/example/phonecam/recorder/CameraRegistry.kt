@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalCamera2Interop::class)
+
 package com.example.phonecam.recorder
 
 import android.annotation.SuppressLint
@@ -6,6 +8,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.util.Log
 import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.lifecycle.ProcessCameraProvider

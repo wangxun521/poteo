@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalCamera2Interop::class)
+
 package com.example.phonecam.recorder
 
 import android.Manifest
@@ -10,6 +12,7 @@ import android.util.Range
 import android.util.Size
 import androidx.annotation.RequiresPermission
 import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
