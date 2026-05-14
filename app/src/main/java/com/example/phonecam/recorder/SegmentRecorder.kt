@@ -9,6 +9,7 @@ import android.util.Log
 import android.util.Range
 import android.util.Size
 import androidx.annotation.RequiresPermission
+import androidx.camera.camera2.interop.Camera2Interop
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -58,31 +59,31 @@ class SegmentRecorder(
     private var currentRecording: Recording? = null
     private var currentFile: File? = null
 
-    @Volatile private var currentSelector: CameraSelector? = null
+    @Volatile private var currentEntry: CameraEntry? = null
     @Volatile private var currentConfig: StreamConfig? = null
-    @Volatile private var pendingRebuild: Pair<CameraSelector, StreamConfig>? = null
+    @Volatile private var pendingRebuild: Pair<CameraEntry, StreamConfig>? = null
     @Volatile private var pendingSurfaceProvider: Preview.SurfaceProvider? = null
     private val nameFmt = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US)
     private var rotating = false
 
     @RequiresPermission(allOf = [Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO])
-    fun start(selector: CameraSelector, cfg: StreamConfig) {
-        currentSelector = selector
+    fun start(entry: CameraEntry, cfg: StreamConfig) {
+        currentEntry = entry
         currentConfig = cfg
-        bindWith(selector, cfg)
+        bindWith(entry, cfg)
         startNextSegment(cfg.saveAudio)
     }
 
     /** Re-bind to a new camera and/or apply new config. Safe to call mid-stream. */
-    fun rebuild(selector: CameraSelector, cfg: StreamConfig) {
+    fun rebuild(entry: CameraEntry, cfg: StreamConfig) {
         if (currentRecording == null) {
-            currentSelector = selector
+            currentEntry = entry
             currentConfig = cfg
-            bindWith(selector, cfg)
+            bindWith(entry, cfg)
             startNextSegment(cfg.saveAudio)
             return
         }
-        pendingRebuild = selector to cfg
+        pendingRebuild = entry to cfg
         rotating = false
         main.removeCallbacksAndMessages(null)
         currentRecording?.stop()
@@ -104,18 +105,25 @@ class SegmentRecorder(
         } catch (_: Throwable) { false }
     }
 
-    @SuppressLint("MissingPermission")
-    private fun bindWith(selector: CameraSelector, cfg: StreamConfig) {
-        val recorder = Recorder.Builder()
+    @SuppressLint("MissingPermission", "UnsafeOptInUsageError")
+    private fun bindWith(entry: CameraEntry, cfg: StreamConfig) {
+        val pid = entry.physicalCam2Id
+        val recorderBuilder = Recorder.Builder()
             .setQualitySelector(QualitySelector.from(cfg.toQuality()))
             .setTargetVideoEncodingBitRate(cfg.recBitrate)
-            .build()
-        val capture = VideoCapture.Builder(recorder)
+        val recorder = recorderBuilder.build()
+
+        val captureBuilder = VideoCapture.Builder(recorder)
             .setTargetFrameRate(Range(cfg.recFps.coerceIn(1, 60), cfg.recFps.coerceIn(1, 60)))
-            .build()
-        val prev = Preview.Builder().build().also {
+        if (pid != null) Camera2Interop.Extender(captureBuilder).setPhysicalCameraId(pid)
+        val capture = captureBuilder.build()
+
+        val previewBuilder = Preview.Builder()
+        if (pid != null) Camera2Interop.Extender(previewBuilder).setPhysicalCameraId(pid)
+        val prev = previewBuilder.build().also {
             pendingSurfaceProvider?.let(it::setSurfaceProvider)
         }
+
         val analysis: ImageAnalysis? = mjpegAnalyzer?.let { analyzer ->
             val resSel = ResolutionSelector.Builder()
                 .setResolutionStrategy(
@@ -124,21 +132,22 @@ class SegmentRecorder(
                         ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER
                     )
                 ).build()
-            ImageAnalysis.Builder()
+            val analysisBuilder = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .setResolutionSelector(resSel)
-                .build()
-                .also { it.setAnalyzer(analysisExecutor, analyzer) }
+            if (pid != null) Camera2Interop.Extender(analysisBuilder).setPhysicalCameraId(pid)
+            analysisBuilder.build().also { it.setAnalyzer(analysisExecutor, analyzer) }
         }
+
         try {
             cameraProvider.unbindAll()
-            camera = if (analysis != null) cameraProvider.bindToLifecycle(lifecycleOwner, selector, capture, prev, analysis)
-                    else cameraProvider.bindToLifecycle(lifecycleOwner, selector, capture, prev)
+            camera = if (analysis != null) cameraProvider.bindToLifecycle(lifecycleOwner, entry.selector, capture, prev, analysis)
+                    else cameraProvider.bindToLifecycle(lifecycleOwner, entry.selector, capture, prev)
             videoCapture = capture
             preview = prev
             imageAnalysis = analysis
         } catch (t: Throwable) {
-            Log.e(tag, "bindWith failed", t)
+            Log.e(tag, "bindWith failed (cam=${entry.cam2Id} phys=${entry.physicalCam2Id}): ${t.message}")
             throw t
         }
     }
@@ -167,7 +176,7 @@ class SegmentRecorder(
                     val pr = pendingRebuild
                     if (pr != null) {
                         pendingRebuild = null
-                        currentSelector = pr.first
+                        currentEntry = pr.first
                         currentConfig = pr.second
                         try {
                             bindWith(pr.first, pr.second)

@@ -26,7 +26,7 @@
 
   /* fills available height, letterboxes content */
   .stage{flex:1;min-height:0;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative}
-  .stage img,.stage video{width:100%;height:100%;object-fit:contain;transition:transform .2s}
+  .stage img,.stage video{width:100%;height:100%;object-fit:contain;transition:transform .2s;transform-origin:center center}
   .stage.fs{position:fixed;inset:0;z-index:9999;background:#000}
 
   .ctrl{padding:8px 12px;background:#161616;border-top:1px solid #222;display:flex;flex-wrap:wrap;gap:6px;align-items:center;flex:0 0 auto}
@@ -177,6 +177,7 @@
     </div>
     <div class="toolbar" style="flex-wrap:wrap;gap:6px">
       <button onclick="loadRecordings()">刷新</button>
+      <button onclick="rotateRec()">↻ 旋转</button>
       <button onclick="toggleFs('recStage','btnRecFs')" id="btnRecFs">全屏</button>
       <label style="color:#aaa;font-size:12px;margin-left:8px">从</label>
       <input id="recFrom" type="datetime-local" />
@@ -223,8 +224,44 @@ function reconnect() { attach(); }
 function toggleSnap() { mode = (mode === 'mjpeg') ? 'snapshot' : 'mjpeg'; attach(); }
 function rotateView() {
   rotation = (rotation + 90) % 360;
-  img.style.transform = 'rotate(' + rotation + 'deg)';
+  applyRotation('liveStage', 'liveImg', rotation);
 }
+
+// Compute the scale needed so that the rotated media fills the stage
+// (with object-fit:contain letterboxing preserved).
+function applyRotation(stageId, mediaId, rot) {
+  const stage = document.getElementById(stageId);
+  const m = document.getElementById(mediaId);
+  if (!stage || !m) return;
+  const sR = stage.getBoundingClientRect();
+  const natW = m.naturalWidth || m.videoWidth || 0;
+  const natH = m.naturalHeight || m.videoHeight || 0;
+  // Until we have intrinsic size, fall back to plain rotation.
+  if (natW <= 0 || natH <= 0 || sR.width <= 0 || sR.height <= 0) {
+    m.style.transform = 'rotate(' + rot + 'deg)';
+    return;
+  }
+  // Size of the media element after object-fit:contain inside stage:
+  const imgAR = natW / natH;
+  const stageAR = sR.width / sR.height;
+  let fitW, fitH;
+  if (stageAR > imgAR) { fitH = sR.height; fitW = sR.height * imgAR; }
+  else { fitW = sR.width; fitH = sR.width / imgAR; }
+  // After rotating the media, its bounding box swaps when 90/270.
+  const occW = (rot === 90 || rot === 270) ? fitH : fitW;
+  const occH = (rot === 90 || rot === 270) ? fitW : fitH;
+  // Fit (letterbox) the rotated bounding box to the stage.
+  const scale = Math.min(sR.width / occW, sR.height / occH);
+  m.style.transform = 'rotate(' + rot + 'deg) scale(' + scale + ')';
+}
+
+// Reapply rotation on window resize and after media metadata changes.
+window.addEventListener('resize', () => {
+  applyRotation('liveStage', 'liveImg', rotation);
+  applyRotation('recStage', 'player', recRotation);
+});
+// New JPEG arrives → naturalWidth may change after first frame; recompute.
+img.addEventListener('load', () => applyRotation('liveStage', 'liveImg', rotation));
 function toggleFs(stageId, btnId) {
   const el = document.getElementById(stageId);
   const fs = el.classList.toggle('fs');
@@ -373,6 +410,11 @@ async function applyStorage() {
 // ---------- recordings ----------
 let currentPlaying = null;
 let recFromMs = null, recToMs = null;
+let recRotation = 0;
+function rotateRec() {
+  recRotation = (recRotation + 90) % 360;
+  applyRotation('recStage', 'player', recRotation);
+}
 
 // Parse filename like 20260514_153045.mp4 → epoch ms (LOCAL time).
 function parseFnDate(name) {
@@ -434,6 +476,8 @@ function playRecording(name) {
     el.classList.toggle('playing', el.querySelector('.nm').textContent === name);
   });
 }
+document.getElementById('player').addEventListener('loadedmetadata',
+  () => applyRotation('recStage', 'player', recRotation));
 
 // ---------- thermal ----------
 async function loadTemps() {

@@ -41,7 +41,7 @@ class RecordingService : LifecycleService() {
             if (!::segmentRecorder.isInitialized) return false
             val entry = cameraRegistry.find(cfg.cameraId) ?: cameraRegistry.defaultBack()
             return try {
-                segmentRecorder.rebuild(entry.selector, cfg)
+                segmentRecorder.rebuild(entry, cfg)
                 currentCameraId = entry.id
                 currentConfig = cfg.copy(cameraId = entry.id)
                 StreamConfig.save(this@RecordingService, currentConfig)
@@ -143,7 +143,7 @@ class RecordingService : LifecycleService() {
                     bitrateController.onSegmentFinalized(mp4)
                 }
             )
-            segmentRecorder.start(entry.selector, currentConfig)
+            segmentRecorder.start(entry, currentConfig)
         }, mainExecutor)
     }
 
