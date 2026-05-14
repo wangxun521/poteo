@@ -33,6 +33,10 @@ class LocalHttpServer(
                 path == "switch" -> switchCamera(session)
                 path == "config" -> if (session.method == Method.POST) applyConfig(session) else configJson()
                 path == "thermal" -> jsonOk(thermal.toJson())
+                path == "diag" -> newFixedLengthResponse(
+                    Response.Status.OK, "text/plain; charset=utf-8",
+                    Camera2Diag.dump(context)
+                ).also { it.addHeader("Access-Control-Allow-Origin", "*") }
                 path == "storage" -> if (session.method == Method.POST) applyStorage(session) else storageJson()
                 path == "zoom" -> if (session.method == Method.POST) applyZoom(session) else zoomJson()
                 path == "recordings" -> recordingsJson()
