@@ -12,7 +12,7 @@
         android:textSize="20sp"
         android:textStyle="bold"
         android:layout_gravity="center_horizontal"
-        android:layout_marginBottom="12dp" />
+        android:layout_marginBottom="8dp" />
 
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
@@ -21,6 +21,25 @@
         android:layout_weight="1"
         android:background="#000"
         android:visibility="gone" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="摄像头:"
+            android:textColor="#aaa"
+            android:layout_marginEnd="8dp" />
+        <Spinner
+            android:id="@+id/spCamera"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1" />
+    </LinearLayout>
 
     <com.google.android.material.switchmaterial.SwitchMaterial
         android:id="@+id/swPreview"
@@ -34,7 +53,7 @@
         android:id="@+id/swAudio"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="同时录制音频"
+        android:text="录制时保存音频"
         android:checked="true" />
 
     <LinearLayout
@@ -71,5 +90,5 @@
         android:layout_marginTop="6dp"
         android:textSize="11sp"
         android:textColor="#888"
-        android:text="开启实时画面会增加耗电；远程浏览器预览不受此开关影响。" />
+        android:text="远程预览页有更多设置: 分辨率/码率/帧率/JPEG质量/摄像头切换/录像回放" />
 </LinearLayout>

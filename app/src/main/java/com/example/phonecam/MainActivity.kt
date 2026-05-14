@@ -12,11 +12,15 @@ import android.os.Bundle
 import android.os.IBinder
 import android.text.format.Formatter
 import android.view.View
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.example.phonecam.databinding.ActivityMainBinding
+import com.example.phonecam.recorder.CameraEntry
+import com.example.phonecam.recorder.StreamConfig
 import com.example.phonecam.service.RecordingService
 
 class MainActivity : AppCompatActivity() {
@@ -24,26 +28,22 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private var serviceBinder: RecordingService.LocalBinder? = null
     private var serviceBound = false
+    private var cameras: List<CameraEntry> = emptyList()
 
     private val conn = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             serviceBinder = service as? RecordingService.LocalBinder
             serviceBound = true
-            // If the user already turned the preview switch on before the service came up,
-            // attach the surface now.
-            applyPreviewState()
+            refreshFromService()
         }
         override fun onServiceDisconnected(name: ComponentName?) {
-            serviceBinder = null
-            serviceBound = false
+            serviceBinder = null; serviceBound = false
         }
     }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
-    ) { result ->
-        if (result.values.all { it }) startService() else toast("权限被拒绝，无法录制")
-    }
+    ) { r -> if (r.values.all { it }) startService() else toast("权限被拒绝") }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,25 +55,23 @@ class MainActivity : AppCompatActivity() {
             unbindIfBound()
             stopService(Intent(this, RecordingService::class.java))
             binding.previewView.visibility = View.GONE
-            toast("已停止")
-            refreshUrl()
+            toast("已停止"); refreshUrl()
         }
         binding.swAudio.setOnCheckedChangeListener { _, checked ->
-            getSharedPreferences("cfg", MODE_PRIVATE).edit().putBoolean("save_audio", checked).apply()
+            val cur = StreamConfig.load(this).copy(saveAudio = checked)
+            StreamConfig.save(this, cur)
+            serviceBinder?.applyConfig(cur)
         }
-        binding.swAudio.isChecked =
-            getSharedPreferences("cfg", MODE_PRIVATE).getBoolean("save_audio", true)
-
         binding.swPreview.setOnCheckedChangeListener { _, _ -> applyPreviewState() }
+
+        val cfg = StreamConfig.load(this)
+        binding.swAudio.isChecked = cfg.saveAudio
 
         refreshUrl()
     }
 
     override fun onStart() {
         super.onStart()
-        // Bind if service is already running (no-op startService just to get the binder
-        // without starting a new instance; if not running, binding without BIND_AUTO_CREATE
-        // returns false and we ignore until user clicks 开始监控).
         bindService(Intent(this, RecordingService::class.java), conn, 0)
     }
 
@@ -83,10 +81,27 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun unbindIfBound() {
-        if (serviceBound) {
-            try { unbindService(conn) } catch (_: Throwable) {}
-            serviceBound = false
-            serviceBinder = null
+        if (serviceBound) { try { unbindService(conn) } catch (_: Throwable) {} ; serviceBound = false; serviceBinder = null }
+    }
+
+    private fun refreshFromService() {
+        val b = serviceBinder ?: return
+        applyPreviewState()
+        cameras = b.listCameras()
+        if (cameras.isEmpty()) return
+        val labels = cameras.map { it.label }
+        binding.spCamera.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
+        val curId = b.currentCameraId()
+        val idx = cameras.indexOfFirst { it.id == curId }.coerceAtLeast(0)
+        binding.spCamera.setSelection(idx, false)
+        binding.spCamera.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val pick = cameras.getOrNull(position) ?: return
+                if (pick.id != serviceBinder?.currentCameraId()) {
+                    serviceBinder?.switchCamera(pick.id)
+                }
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
     }
 
@@ -105,30 +120,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun ensurePermissionsAndStart() {
         val perms = mutableListOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            perms += Manifest.permission.POST_NOTIFICATIONS
-        }
-        val missing = perms.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) perms += Manifest.permission.POST_NOTIFICATIONS
+        val missing = perms.filter { ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED }
         if (missing.isEmpty()) startService() else permissionLauncher.launch(missing.toTypedArray())
     }
 
     private fun startService() {
         val intent = Intent(this, RecordingService::class.java)
         ContextCompat.startForegroundService(this, intent)
-        // Bind so we can talk to it (toggle preview).
         bindService(intent, conn, Context.BIND_AUTO_CREATE)
-        toast("已启动监控")
-        refreshUrl()
+        toast("已启动监控"); refreshUrl()
     }
 
     private fun getLocalIpAddress(): String? {
         val wifi = applicationContext.getSystemService(Context.WIFI_SERVICE) as WifiManager
         val ipInt = wifi.connectionInfo.ipAddress
         if (ipInt == 0) return null
-        @Suppress("DEPRECATION")
-        return Formatter.formatIpAddress(ipInt)
+        @Suppress("DEPRECATION") return Formatter.formatIpAddress(ipInt)
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()

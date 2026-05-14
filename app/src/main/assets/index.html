@@ -5,61 +5,320 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>PhoneCam Live</title>
 <style>
-  html,body{margin:0;background:#000;color:#ddd;font-family:sans-serif;height:100%}
-  #wrap{display:flex;flex-direction:column;height:100%}
-  #stage{flex:1;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
-  #stage img{max-width:100%;max-height:100%;object-fit:contain}
-  #bar{padding:8px 12px;font-size:13px;background:#111;display:flex;justify-content:space-between;align-items:center;gap:8px}
-  button{background:#444;color:#fff;border:0;padding:6px 12px;border-radius:4px;cursor:pointer}
-  button:hover{background:#555}
-  #status{flex:1;min-height:1em}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:#0b0b0b;color:#ddd;font-family:-apple-system,Segoe UI,sans-serif;height:100%;font-size:14px}
+  #app{display:flex;flex-direction:column;height:100%}
+  #tabs{display:flex;background:#1a1a1a;border-bottom:1px solid #2a2a2a;align-items:center}
+  #tabs button{flex:1;padding:10px;background:transparent;color:#aaa;border:0;cursor:pointer;font-size:14px}
+  #tabs button.active{color:#fff;background:#252525;border-bottom:2px solid #4a9eff}
+  #temps{display:flex;gap:6px;padding:0 10px;font-size:11px;font-family:monospace;color:#aaa;white-space:nowrap}
+  .tbadge{padding:2px 6px;border-radius:3px;background:#252525}
+  .tbadge.warn{background:#7a4a00;color:#ffd28a}
+  .tbadge.hot{background:#7a1c1c;color:#ffb0b0}
+  .tbadge details{display:inline}
+  .tbadge summary{list-style:none;cursor:pointer}
+  .tbadge summary::-webkit-details-marker{display:none}
+  .tbadge .all{position:absolute;background:#1a1a1a;border:1px solid #333;padding:6px 10px;border-radius:4px;margin-top:4px;font-size:11px;line-height:1.6;z-index:100;min-width:180px}
+  .page{display:none;flex:1;min-height:0;overflow:auto}
+  .page.active{display:flex;flex-direction:column}
+
+  #stage{flex:1;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;min-height:200px;position:relative}
+  #stage img,#stage video{max-width:100%;max-height:100%;object-fit:contain;transition:transform .2s}
+  #stage.fs{position:fixed;inset:0;z-index:9999;background:#000}
+
+  .ctrl{padding:8px 12px;background:#161616;border-top:1px solid #222;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .ctrl button,.ctrl select,.ctrl input{background:#2a2a2a;color:#fff;border:1px solid #3a3a3a;padding:6px 10px;border-radius:4px;font-size:13px}
+  .ctrl button{cursor:pointer}
+  .ctrl button:hover{background:#3a3a3a}
+  .ctrl button.on{background:#1d6fc7;border-color:#1d6fc7}
+  .ctrl label{color:#aaa;font-size:12px;margin-right:4px}
+  #status{color:#888;font-size:12px;margin-left:auto}
+
+  .cams{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px;background:#161616;border-top:1px solid #222}
+  .cam{padding:6px 12px;background:#2a2a2a;border:1px solid #3a3a3a;border-radius:16px;cursor:pointer;font-size:13px;color:#fff}
+  .cam.active{background:#1d6fc7;border-color:#1d6fc7}
+
+  .panel{padding:12px;color:#ccc}
+  .panel h3{margin:8px 0 4px;font-size:14px;color:#fff}
+  .row{display:flex;align-items:center;gap:8px;margin:6px 0}
+  .row label{min-width:90px;color:#aaa;font-size:12px}
+  .row input[type=range]{flex:1}
+  .row .val{min-width:70px;text-align:right;font-family:monospace;color:#9cd9ff}
+
+  #recList{padding:8px}
+  .rec{display:flex;align-items:center;gap:10px;padding:8px;border-bottom:1px solid #222;cursor:pointer}
+  .rec:hover{background:#1a1a1a}
+  .rec .nm{flex:1;font-family:monospace;font-size:13px}
+  .rec .sz{color:#888;font-size:12px}
+
+  #player{background:#000;width:100%;height:auto;display:none}
+  #player.show{display:block}
 </style>
 </head>
 <body>
-<div id="wrap">
-  <div id="stage"><img id="v" alt="live" /></div>
-  <div id="bar">
-    <span id="status">连接中…</span>
-    <button onclick="reload()">重连</button>
-    <button onclick="toggleSnap()" id="snapBtn">切到快照模式</button>
+<div id="app">
+  <div id="tabs">
+    <button class="active" data-tab="live">实时</button>
+    <button data-tab="settings">设置</button>
+    <button data-tab="recordings">回放</button>
+    <div id="temps">
+      <details class="tbadge" id="tBadgeWrap">
+        <summary id="tBadge">温度…</summary>
+        <div class="all" id="tDetail">加载中…</div>
+      </details>
+    </div>
+  </div>
+
+  <!-- LIVE -->
+  <div class="page active" data-page="live">
+    <div id="stage"><img id="liveImg" alt="live" /></div>
+    <div class="ctrl">
+      <button onclick="reconnect()">重连</button>
+      <button onclick="toggleSnap()" id="btnSnap">快照模式</button>
+      <button onclick="rotateView()">↻ 旋转</button>
+      <button onclick="toggleFs()" id="btnFs">全屏</button>
+      <span id="status">连接中…</span>
+    </div>
+    <div id="cams" class="cams">摄像头加载中…</div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="page" data-page="settings">
+    <div class="panel">
+      <h3>直播 (浏览器)</h3>
+      <div class="row"><label>分辨率</label>
+        <select id="streamRes">
+          <option value="320x240">320×240 (省流)</option>
+          <option value="480x360">480×360</option>
+          <option value="640x480" selected>640×480 (默认)</option>
+          <option value="960x720">960×720</option>
+          <option value="1280x720">1280×720</option>
+        </select>
+      </div>
+      <div class="row"><label>帧率</label>
+        <input id="streamFps" type="range" min="1" max="30" value="10" />
+        <span class="val" id="streamFpsV">10 fps</span>
+      </div>
+      <div class="row"><label>JPEG 质量</label>
+        <input id="jpegQ" type="range" min="20" max="95" value="60" />
+        <span class="val" id="jpegQV">60</span>
+      </div>
+
+      <h3>录制 (本地存储)</h3>
+      <div class="row"><label>分辨率档</label>
+        <select id="recQuality">
+          <option value="SD">SD (480p)</option>
+          <option value="HD" selected>HD (720p)</option>
+          <option value="FHD">FHD (1080p)</option>
+          <option value="UHD">UHD (4K)</option>
+        </select>
+      </div>
+      <div class="row"><label>码率</label>
+        <input id="recBitrate" type="range" min="500000" max="8000000" step="100000" value="2000000" />
+        <span class="val" id="recBitrateV">2.0 Mbps</span>
+      </div>
+      <div class="row"><label>录制音频</label>
+        <input id="saveAudio" type="checkbox" checked />
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <button onclick="applySettings()" style="background:#1d6fc7;border:0;color:#fff;padding:8px 16px;border-radius:4px;cursor:pointer">应用</button>
+        <span id="settingsStatus" style="color:#888;margin-left:12px"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECORDINGS -->
+  <div class="page" data-page="recordings">
+    <video id="player" controls playsinline></video>
+    <div style="padding:8px 12px;display:flex;gap:8px;background:#161616;border-bottom:1px solid #222">
+      <button onclick="loadRecordings()">刷新</button>
+      <span id="recStatus" style="color:#888;align-self:center">加载中…</span>
+    </div>
+    <div id="recList"></div>
   </div>
 </div>
+
 <script>
-const img = document.getElementById('v');
+// ---------- tabs ----------
+document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#tabs button').forEach(x => x.classList.toggle('active', x === b));
+  document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.dataset.page === b.dataset.tab));
+  if (b.dataset.tab === 'recordings') loadRecordings();
+  if (b.dataset.tab === 'settings') loadConfig();
+});
+
+// ---------- live ----------
+const img = document.getElementById('liveImg');
 const status = document.getElementById('status');
-const snapBtn = document.getElementById('snapBtn');
-let mode = 'mjpeg';     // 'mjpeg' | 'snapshot'
-let snapTimer = null;
+const stage = document.getElementById('stage');
+let mode = 'mjpeg', snapTimer = null, rotation = 0;
 
 function attach() {
   if (snapTimer) { clearInterval(snapTimer); snapTimer = null; }
-  // Cache-bust to force a fresh connection each time
   const t = Date.now();
   if (mode === 'mjpeg') {
     img.src = '/stream.mjpeg?t=' + t;
     status.textContent = '直播中 (MJPEG)';
-    snapBtn.textContent = '切到快照模式';
+    document.getElementById('btnSnap').textContent = '快照模式';
   } else {
-    function pull() { img.src = '/snapshot.jpg?t=' + Date.now(); }
-    pull();
-    snapTimer = setInterval(pull, 1000);
-    status.textContent = '快照模式 (1 张/秒)';
-    snapBtn.textContent = '切到 MJPEG';
+    const pull = () => { img.src = '/snapshot.jpg?t=' + Date.now(); };
+    pull(); snapTimer = setInterval(pull, 1000);
+    status.textContent = '快照 (1张/秒)';
+    document.getElementById('btnSnap').textContent = 'MJPEG 模式';
+  }
+}
+img.onerror = () => { status.textContent = '断开,3秒后重试'; setTimeout(attach, 3000); };
+function reconnect() { attach(); }
+function toggleSnap() { mode = (mode === 'mjpeg') ? 'snapshot' : 'mjpeg'; attach(); }
+function rotateView() {
+  rotation = (rotation + 90) % 360;
+  img.style.transform = 'rotate(' + rotation + 'deg)';
+}
+function toggleFs() {
+  const fs = stage.classList.toggle('fs');
+  document.getElementById('btnFs').textContent = fs ? '退出全屏' : '全屏';
+  if (fs && stage.requestFullscreen) stage.requestFullscreen().catch(()=>{});
+  if (!fs && document.exitFullscreen) document.exitFullscreen().catch(()=>{});
+}
+
+// ---------- cameras ----------
+async function loadCameras() {
+  try {
+    const r = await fetch('/cameras').then(r => r.json());
+    const c = document.getElementById('cams');
+    if (!r.cameras || r.cameras.length === 0) { c.textContent = '未检测到摄像头'; return; }
+    c.innerHTML = '';
+    r.cameras.forEach(cam => {
+      const b = document.createElement('div');
+      b.className = 'cam' + (cam.id === r.current ? ' active' : '');
+      b.textContent = cam.label;
+      b.onclick = async () => {
+        b.textContent = '切换中…';
+        const res = await fetch('/switch?id=' + encodeURIComponent(cam.id), { method: 'POST' }).then(r => r.json()).catch(()=>null);
+        await loadCameras();
+        if (res && res.ok) attach();
+      };
+      c.appendChild(b);
+    });
+  } catch (e) { document.getElementById('cams').textContent = '加载失败: ' + e.message; }
+}
+
+// ---------- config ----------
+async function loadConfig() {
+  try {
+    const c = await fetch('/config').then(r => r.json());
+    document.getElementById('streamRes').value = c.streamWidth + 'x' + c.streamHeight;
+    document.getElementById('streamFps').value = c.streamFps;
+    document.getElementById('streamFpsV').textContent = c.streamFps + ' fps';
+    document.getElementById('jpegQ').value = c.jpegQuality;
+    document.getElementById('jpegQV').textContent = c.jpegQuality;
+    document.getElementById('recQuality').value = c.recQuality;
+    document.getElementById('recBitrate').value = c.recBitrate;
+    document.getElementById('recBitrateV').textContent = (c.recBitrate/1e6).toFixed(1) + ' Mbps';
+    document.getElementById('saveAudio').checked = c.saveAudio;
+  } catch (e) {}
+}
+['streamFps','jpegQ','recBitrate'].forEach(id => {
+  const el = document.getElementById(id);
+  el.oninput = () => {
+    const v = parseInt(el.value);
+    if (id==='streamFps') document.getElementById('streamFpsV').textContent = v + ' fps';
+    if (id==='jpegQ') document.getElementById('jpegQV').textContent = v;
+    if (id==='recBitrate') document.getElementById('recBitrateV').textContent = (v/1e6).toFixed(1) + ' Mbps';
+  };
+});
+async function applySettings() {
+  const res = document.getElementById('streamRes').value.split('x');
+  const p = new URLSearchParams({
+    streamWidth: res[0],
+    streamHeight: res[1],
+    streamFps: document.getElementById('streamFps').value,
+    jpegQuality: document.getElementById('jpegQ').value,
+    recQuality: document.getElementById('recQuality').value,
+    recBitrate: document.getElementById('recBitrate').value,
+    saveAudio: document.getElementById('saveAudio').checked ? 'true' : 'false'
+  });
+  const s = document.getElementById('settingsStatus');
+  s.textContent = '应用中...';
+  try {
+    const r = await fetch('/config?' + p.toString(), { method: 'POST' }).then(r => r.json());
+    s.textContent = r.ok ? '已应用 ✓' : ('失败: ' + (r.error || ''));
+    setTimeout(() => attach(), 1500);  // give recorder a moment to rebuild
+  } catch (e) { s.textContent = '失败: ' + e.message; }
+}
+
+// ---------- recordings ----------
+async function loadRecordings() {
+  const list = document.getElementById('recList');
+  const st = document.getElementById('recStatus');
+  st.textContent = '加载中…';
+  try {
+    const r = await fetch('/recordings').then(r => r.json());
+    list.innerHTML = '';
+    if (!r.items || r.items.length === 0) { st.textContent = '暂无录像'; return; }
+    st.textContent = r.items.length + ' 段';
+    r.items.forEach(it => {
+      const div = document.createElement('div');
+      div.className = 'rec';
+      const date = new Date(it.mtime).toLocaleString();
+      const mb = (it.size / 1048576).toFixed(1);
+      div.innerHTML = '<div class="nm">' + it.name + '</div>' +
+                      '<div class="sz">' + mb + ' MB · ' + date + '</div>';
+      div.onclick = () => playRecording(it.name);
+      list.appendChild(div);
+    });
+  } catch (e) { st.textContent = '加载失败: ' + e.message; }
+}
+function playRecording(name) {
+  const p = document.getElementById('player');
+  p.src = '/recordings/' + encodeURIComponent(name);
+  p.classList.add('show');
+  p.play().catch(()=>{});
+  p.scrollIntoView({behavior:'smooth'});
+}
+
+// ---------- thermal ----------
+async function loadTemps() {
+  try {
+    const t = await fetch('/thermal').then(r => r.json());
+    const badge = document.getElementById('tBadge');
+    const wrap = document.getElementById('tBadgeWrap').parentElement;
+    const detail = document.getElementById('tDetail');
+    const cpu = t.cpuC, bat = t.batteryC;
+    const headline = cpu != null ? cpu : bat;
+    let label = '温度 -';
+    if (headline != null) {
+      const tag = cpu != null ? 'CPU' : '电池';
+      label = tag + ' ' + headline.toFixed(1) + '°C';
+    }
+    const wrapEl = document.getElementById('tBadgeWrap');
+    wrapEl.classList.remove('warn','hot');
+    if (headline != null) {
+      if (headline >= 55) wrapEl.classList.add('hot');
+      else if (headline >= 45) wrapEl.classList.add('warn');
+    }
+    badge.textContent = label;
+    let html = '';
+    if (bat != null) html += '电池: ' + bat.toFixed(1) + '°C<br>';
+    if (cpu != null) html += 'CPU(峰): ' + cpu.toFixed(1) + '°C<hr style="border:0;border-top:1px solid #333">';
+    if (t.zones && t.zones.length) {
+      html += t.zones.map(z => z.name + ': ' + z.tempC.toFixed(1) + '°C').join('<br>');
+    } else {
+      html += '<i>系统未暴露任何热区</i>';
+    }
+    detail.innerHTML = html;
+  } catch (e) {
+    document.getElementById('tBadge').textContent = '温度: ?';
   }
 }
 
-img.onerror = () => {
-  status.textContent = '连接失败，3 秒后重试…';
-  setTimeout(attach, 3000);
-};
-img.onload = () => {
-  if (mode === 'mjpeg') status.textContent = '直播中 (MJPEG)';
-};
-
-function reload() { attach(); }
-function toggleSnap() { mode = (mode === 'mjpeg') ? 'snapshot' : 'mjpeg'; attach(); }
-
+// boot
 attach();
+loadCameras();
+loadTemps();
+setInterval(loadCameras, 30000);
+setInterval(loadTemps, 5000);
 </script>
 </body>
 </html>

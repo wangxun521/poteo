@@ -11,17 +11,15 @@ import android.os.Binder
 import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
-import androidx.camera.core.Preview
 import android.util.Log
-import androidx.camera.core.CameraSelector
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.video.Recorder
-import androidx.camera.video.VideoCapture
 import androidx.lifecycle.LifecycleService
 import com.example.phonecam.MainActivity
-import com.example.phonecam.R
 import com.example.phonecam.recorder.BitrateController
+import com.example.phonecam.recorder.CameraRegistry
 import com.example.phonecam.recorder.SegmentRecorder
+import com.example.phonecam.recorder.StreamConfig
 import com.example.phonecam.storage.CircularStorageManager
 import com.example.phonecam.streaming.LocalHttpServer
 import com.example.phonecam.streaming.MjpegStreamer
@@ -30,10 +28,31 @@ import java.io.File
 class RecordingService : LifecycleService() {
 
     inner class LocalBinder : Binder() {
+        fun isReady(): Boolean = ::segmentRecorder.isInitialized
         fun setPreviewSurfaceProvider(p: Preview.SurfaceProvider?) {
             if (::segmentRecorder.isInitialized) segmentRecorder.setPreviewSurfaceProvider(p)
         }
-        fun isRecorderReady(): Boolean = ::segmentRecorder.isInitialized
+        fun listCameras(): List<com.example.phonecam.recorder.CameraEntry> =
+            if (::cameraRegistry.isInitialized) cameraRegistry.entries else emptyList()
+        fun currentCameraId(): String = currentCameraId
+        fun config(): StreamConfig = currentConfig
+        fun switchCamera(id: String): Boolean = applyConfig(currentConfig.copy(cameraId = id))
+        fun applyConfig(cfg: StreamConfig): Boolean {
+            if (!::segmentRecorder.isInitialized) return false
+            val entry = cameraRegistry.find(cfg.cameraId) ?: cameraRegistry.defaultBack()
+            return try {
+                segmentRecorder.rebuild(entry.selector, cfg)
+                currentCameraId = entry.id
+                currentConfig = cfg.copy(cameraId = entry.id)
+                StreamConfig.save(this@RecordingService, currentConfig)
+                mjpegStreamer.quality = cfg.jpegQuality
+                mjpegStreamer.targetFps = cfg.streamFps
+                true
+            } catch (t: Throwable) {
+                Log.e(TAG, "applyConfig failed", t); false
+            }
+        }
+        fun videoDir(): File = videoDir
     }
     private val binder = LocalBinder()
     override fun onBind(intent: Intent): IBinder { super.onBind(intent); return binder }
@@ -44,7 +63,7 @@ class RecordingService : LifecycleService() {
         private const val CH_ID = "phonecam_recording"
         private const val NID = 1001
         const val SEGMENT_DURATION_MS = 60_000L
-        const val STORAGE_LIMIT_BYTES = 10L * 1024 * 1024 * 1024 // 10 GB
+        const val STORAGE_LIMIT_BYTES = 10L * 1024 * 1024 * 1024
     }
 
     private lateinit var wakeLock: PowerManager.WakeLock
@@ -53,8 +72,10 @@ class RecordingService : LifecycleService() {
     private lateinit var bitrateController: BitrateController
     private lateinit var mjpegStreamer: MjpegStreamer
     private lateinit var httpServer: LocalHttpServer
-
+    private lateinit var cameraRegistry: CameraRegistry
     private lateinit var videoDir: File
+    private var currentCameraId: String = ""
+    private lateinit var currentConfig: StreamConfig
 
     @SuppressLint("WakelockTimeout")
     override fun onCreate() {
@@ -65,26 +86,32 @@ class RecordingService : LifecycleService() {
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "phonecam:rec").apply { acquire() }
 
         videoDir = File(getExternalFilesDir(null), "videos").apply { mkdirs() }
-
         storage = CircularStorageManager(videoDir, STORAGE_LIMIT_BYTES)
         bitrateController = BitrateController()
-        mjpegStreamer = MjpegStreamer()
-        httpServer = LocalHttpServer(this, HTTP_PORT, mjpegStreamer).also {
+        currentConfig = StreamConfig.load(this)
+        mjpegStreamer = MjpegStreamer(
+            quality = currentConfig.jpegQuality,
+            targetFps = currentConfig.streamFps
+        )
+        httpServer = LocalHttpServer(this, HTTP_PORT, mjpegStreamer, binder, videoDir).also {
             try { it.start() } catch (e: Exception) { Log.e(TAG, "http start fail", e) }
         }
-
-        val saveAudio = getSharedPreferences("cfg", MODE_PRIVATE).getBoolean("save_audio", true)
 
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
+            cameraRegistry = CameraRegistry(cameraProvider)
+            val entry = cameraRegistry.find(currentConfig.cameraId) ?: cameraRegistry.defaultBack()
+            currentCameraId = entry.id
+            currentConfig = currentConfig.copy(cameraId = entry.id)
+            StreamConfig.save(this, currentConfig)
+
             segmentRecorder = SegmentRecorder(
                 context = this,
                 lifecycleOwner = this,
                 cameraProvider = cameraProvider,
                 videoDir = videoDir,
                 segmentDurationMs = SEGMENT_DURATION_MS,
-                saveAudio = saveAudio,
                 bitrateController = bitrateController,
                 mjpegAnalyzer = mjpegStreamer,
                 onSegmentFinalized = { mp4 ->
@@ -92,7 +119,7 @@ class RecordingService : LifecycleService() {
                     bitrateController.onSegmentFinalized(mp4)
                 }
             )
-            segmentRecorder.start(CameraSelector.DEFAULT_BACK_CAMERA)
+            segmentRecorder.start(entry.selector, currentConfig)
         }, mainExecutor)
     }
 

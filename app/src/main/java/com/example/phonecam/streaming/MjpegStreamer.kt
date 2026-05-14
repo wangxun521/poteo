@@ -19,7 +19,7 @@ import android.graphics.BitmapFactory
  */
 class MjpegStreamer(
     @Volatile var quality: Int = 60,   // JPEG quality 1-100
-    private val targetFps: Int = 10
+    @Volatile var targetFps: Int = 10
 ) : ImageAnalysis.Analyzer {
 
     @Volatile var latest: ByteArray? = null
@@ -27,7 +27,7 @@ class MjpegStreamer(
     private val frameId = AtomicLong(0L)
     fun frameSeq(): Long = frameId.get()
 
-    private val minIntervalMs = (1000 / targetFps).toLong()
+    private fun minIntervalMs(): Long = (1000 / targetFps.coerceIn(1, 60)).toLong()
     @Volatile private var lastProduced = 0L
 
     private val lock = Object()
@@ -46,7 +46,7 @@ class MjpegStreamer(
     override fun analyze(image: ImageProxy) {
         try {
             val now = System.currentTimeMillis()
-            if (now - lastProduced < minIntervalMs) return
+            if (now - lastProduced < minIntervalMs()) return
             val jpeg = encodeToJpeg(image) ?: return
             lastProduced = now
             latest = jpeg
